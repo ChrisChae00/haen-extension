@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build/Dist 
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Chrome Extension specific
+*.crx
+*.pem
+key.pem
