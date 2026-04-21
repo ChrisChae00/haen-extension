@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Haen</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="popup" id="main-popup">
+
+  <!-- HEADER -->
+  <div class="popup-header">
+    <div class="header-left">
+      <div class="logo-mark">
+        <svg viewBox="0 0 56 22" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;height:22px;">
+          <rect x="1" y="1" width="54" height="20" rx="6" stroke="#c4b5fd" stroke-width="1.5" fill="#c4b5fd" opacity=".05"/>
+          <rect x="1" y="1" width="54" height="20" rx="6" stroke="#c4b5fd" stroke-width="1.5" fill="none"/>
+          <text x="4"  y="16" font-family="'IBM Plex Sans KR',sans-serif" font-weight="600" font-size="13" fill="white">H</text>
+          <text x="18" y="10" font-family="'IBM Plex Sans KR',sans-serif" font-weight="600" font-size="9.5" fill="white">a</text>
+          <text x="18" y="17" font-family="'IBM Plex Sans KR',sans-serif" font-weight="600" font-size="9.5" fill="#c4b5fd">e</text>
+          <text x="28" y="16" font-family="'IBM Plex Sans KR',sans-serif" font-weight="600" font-size="13" fill="white">N</text>
+        </svg>
+      </div>
+      <span class="wordmark" id="settings-wordmark" style="display:none;" data-i18n="settings_title">설정</span>
+      <span class="auto-detect-badge" id="auto-badge" style="display:none;"></span>
+    </div>
+    <div class="header-right" id="header-right">
+      <div class="lang-seg" id="ui-lang-seg">
+        <span class="active" data-lang="ko">KO</span>
+        <span data-lang="en">EN</span>
+      </div>
+      <button class="hdr-icon" id="btn-settings"
+              data-i18n-title="settings_title" title="설정"
+              data-i18n-aria="settings_title" aria-label="설정">
+        <svg width="14" height="14" fill="none" viewBox="0 0 14 14">
+          <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.6 2.6l1.1 1.1M10.3 10.3l1.1 1.1M11.4 2.6l-1.1 1.1M3.7 10.3l-1.1 1.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="hdr-icon" id="btn-more"
+              data-i18n-title="more" title="더보기"
+              data-i18n-aria="more" aria-label="더보기">
+        <svg width="14" height="14" fill="none" viewBox="0 0 14 14">
+          <circle cx="7" cy="3" r="1.2" fill="currentColor"/>
+          <circle cx="7" cy="7" r="1.2" fill="currentColor"/>
+          <circle cx="7" cy="11" r="1.2" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div id="main-content">
+
+    <div class="direction-bar">
+      <div class="seg-ctrl" id="direction-seg">
+        <button class="active" data-dir="ko-en" data-i18n="dir_ko_to_en">한 → 영</button>
+        <button data-dir="en-ko" data-i18n="dir_en_to_ko">영 → 한</button>
+        <button data-dir="auto" data-i18n="dir_auto">자동 감지</button>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="textarea-wrap">
+        <textarea id="main-textarea" rows="4" maxlength="500"
+                  data-i18n-placeholder="input_placeholder"
+                  placeholder="번역할 텍스트를 입력하세요..."></textarea>
+      </div>
+      <div class="char-counter" id="char-counter">0 / 500</div>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn-translate" id="btn-translate" disabled data-i18n="btn_translate">
+        번역하기 →
+      </button>
+    </div>
+
+    <div class="result-panel" id="result-panel">
+      <div class="result-tabs" id="result-tabs">
+        <button class="result-tab active" data-tab="literal" data-i18n="tab_literal">직역</button>
+        <button class="result-tab" data-tab="nuance" data-i18n="tab_nuance">뉘앙스</button>
+        <button class="result-tab" data-tab="alternatives" data-i18n="tab_alternatives">대체표현</button>
+      </div>
+      <div class="result-content" id="result-content">
+        <div class="result-empty" id="empty-hint">
+          <p data-i18n="result_empty_title">번역 결과가 여기에 표시됩니다</p>
+          <small data-i18n="result_empty_sub">텍스트를 입력한 후 번역하기를 눌러주세요</small>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /#main-content -->
+
+  <!-- SETTINGS PANEL -->
+  <div id="settings-panel" style="display:none; flex-direction:column; flex:1; overflow:hidden;">
+    <div class="settings-body">
+      <div class="settings-section">
+
+        <div class="settings-section-title" data-i18n="settings_api">API 설정</div>
+        <div class="settings-card">
+          <div class="api-input-row">
+            <div class="api-input-label" data-i18n="settings_api_key">API 키</div>
+            <div class="api-input-wrap">
+              <input class="api-input" type="password" id="api-key-input"
+                     data-i18n-placeholder="settings_api_key_placeholder"
+                     placeholder="gsk_로 시작하는 Groq API 키" />
+              <button class="btn-icon-sm" id="btn-toggle-api-key"
+                      data-i18n-title="settings_api_key" title="API 키">
+                <svg width="14" height="14" fill="none" viewBox="0 0 14 14">
+                  <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.4" fill="none"/>
+                  <circle cx="7" cy="7" r="1.8" stroke="currentColor" stroke-width="1.4"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-label" data-i18n="settings_model">모델 선택</div>
+            <select class="settings-select" id="model-select">
+              <option value="llama4" data-i18n="model_llama4">Llama 4 Scout (빠름, 기본)</option>
+              <option value="qwen3" data-i18n="model_qwen3">Qwen3 32B (정확도 우선)</option>
+              <option value="gemma2" data-i18n="model_gemma2">Gemma 2 9B (안정적)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-section-title" data-i18n="settings_prefs">환경설정</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-label" data-i18n="pref_default_dir">기본 번역 방향</div>
+            <select class="settings-select" id="default-dir-select">
+              <option value="ko-en" data-i18n="dir_ko_to_en">한 → 영</option>
+              <option value="en-ko" data-i18n="dir_en_to_ko">영 → 한</option>
+              <option value="auto" data-i18n="dir_auto">자동 감지</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div class="settings-label" data-i18n="pref_ui_lang">UI 기본 언어</div>
+            <div class="lang-seg" id="settings-lang-seg" style="border-color:var(--color-border);">
+              <span class="active" data-lang="ko" style="color:var(--color-ink-500);background:var(--color-surface-2);">KO</span>
+              <span data-lang="en" style="color:var(--color-ink-300);">EN</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label" data-i18n="pref_dark_mode">다크모드</div>
+              <div class="settings-hint" data-i18n="pref_dark_hint">시스템 설정 따름</div>
+            </div>
+            <button class="toggle" id="dark-toggle"
+                    data-i18n-aria="pref_dark_mode" aria-label="다크모드"></button>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label" data-i18n="pref_auto_copy">결과 자동 복사</div>
+              <div class="settings-hint" data-i18n="pref_auto_copy_hint">번역 완료 시 자동으로 복사</div>
+            </div>
+            <button class="toggle" id="auto-copy-toggle"
+                    data-i18n-aria="pref_auto_copy" aria-label="결과 자동 복사"></button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button class="btn-save" id="btn-save" data-i18n="btn_save">저장하기</button>
+      <div class="about-line" id="about-line" data-i18n="about_line">Haen v0.1.0 · Made with ♥ in Korea</div>
+    </div>
+  </div>
+
+</div><!-- /.popup -->
+
+<script src="src/i18n.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

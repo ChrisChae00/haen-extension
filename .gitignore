@@ -31,3 +31,6 @@ npm-debug.log*
 *.crx
 *.pem
 key.pem
+
+# Claude Code
+.claude/

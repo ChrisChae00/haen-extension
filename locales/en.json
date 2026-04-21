@@ -1,0 +1,59 @@
+{
+  "app_name": "Haen",
+  "app_tagline": "Smart AI translator for Korean ↔ English",
+
+  "dir_ko_to_en": "KO → EN",
+  "dir_en_to_ko": "EN → KO",
+  "dir_auto": "Auto detect",
+
+  "input_placeholder": "Enter text to translate...",
+  "char_counter": "{{current}} / {{max}}",
+  "btn_translate": "Translate →",
+  "btn_translating": "Translating...",
+
+  "tab_literal": "Literal",
+  "tab_nuance": "Nuance",
+  "tab_alternatives": "Alternatives",
+
+  "copy_btn": "Copy",
+  "copy_done": "Copied ✓",
+
+  "result_empty_title": "Translation appears here",
+  "result_empty_sub": "Enter text and press Translate",
+
+  "settings_title": "Settings",
+  "more": "More",
+  "settings_api": "API Settings",
+  "settings_api_key": "API Key",
+  "settings_api_key_placeholder": "Groq API key starting with gsk_",
+  "settings_model": "Model",
+  "model_llama4": "Llama 4 Scout (Fast, Default)",
+  "model_qwen3": "Qwen3 32B (Accuracy)",
+  "model_gemma2": "Gemma 2 9B (Stable)",
+
+  "settings_prefs": "Preferences",
+  "pref_default_dir": "Default direction",
+  "pref_ui_lang": "UI language",
+  "pref_dark_mode": "Dark mode",
+  "pref_dark_hint": "Follows system setting",
+  "pref_auto_copy": "Auto-copy result",
+  "pref_auto_copy_hint": "Copies automatically on completion",
+
+  "btn_save": "Save",
+  "save_done": "Saved ✓",
+  "btn_back": "Back",
+
+  "error_api_key_title": "Invalid API key",
+  "error_api_key_sub": "Check your API key in settings",
+  "error_rate_limit": "Too many requests. Please try again shortly",
+  "error_network": "Check your internet connection",
+  "error_server": "Server error. Please try again",
+  "error_empty_input": "Please enter text",
+  "error_too_long": "Please keep input under 500 characters",
+
+  "btn_retry": "Retry",
+  "btn_open_settings": "Open settings →",
+
+  "auto_detected": "Detected: {{lang}}",
+  "about_line": "Haen v0.1.0 · Made with ♥ in Korea"
+}
