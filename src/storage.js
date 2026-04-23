@@ -37,3 +37,6 @@ export const addToHistory = async entry => {
 };
 
 export const clearHistory = () => _set('history', []);
+
+export const getAutoCopy = () => _get('autoCopy', false);
+export const setAutoCopy = val => _set('autoCopy', val);

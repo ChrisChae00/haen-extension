@@ -6,11 +6,11 @@ let messages = {};
 async function initI18n() {
   let stored = {};
   try {
-    stored = await chrome.storage.local.get('ui_language');
+    stored = await chrome.storage.local.get('uiLanguage');
   } catch (_) {
     stored = {};
   }
-  currentLang = stored.ui_language
+  currentLang = stored.uiLanguage
     || (navigator.language && navigator.language.startsWith('ko') ? 'ko' : 'en');
   await loadLocale(currentLang);
 }
@@ -34,7 +34,7 @@ function t(key, params = {}) {
 
 async function setLanguage(lang) {
   try {
-    await chrome.storage.local.set({ ui_language: lang });
+    await chrome.storage.local.set({ uiLanguage: lang });
   } catch (_) { /* non-extension context */ }
   currentLang = lang;
   await loadLocale(lang);

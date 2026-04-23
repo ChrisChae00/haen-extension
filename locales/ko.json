@@ -35,7 +35,7 @@
   "pref_default_dir": "기본 번역 방향",
   "pref_ui_lang": "UI 기본 언어",
   "pref_dark_mode": "다크모드",
-  "pref_dark_hint": "시스템 설정 따름",
+  "pref_dark_hint": "어두운 테마 사용",
   "pref_auto_copy": "결과 자동 복사",
   "pref_auto_copy_hint": "번역 완료 시 자동으로 복사",
 

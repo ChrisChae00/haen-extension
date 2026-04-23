@@ -35,7 +35,7 @@
   "pref_default_dir": "Default direction",
   "pref_ui_lang": "UI language",
   "pref_dark_mode": "Dark mode",
-  "pref_dark_hint": "Follows system setting",
+  "pref_dark_hint": "Use dark theme",
   "pref_auto_copy": "Auto-copy result",
   "pref_auto_copy_hint": "Copies automatically on completion",
 
