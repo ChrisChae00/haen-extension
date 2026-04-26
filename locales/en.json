@@ -11,9 +11,10 @@
   "btn_translate": "Translate →",
   "btn_translating": "Translating...",
 
-  "tab_literal": "Literal",
-  "tab_nuance": "Nuance",
+  "tab_translation": "Translation",
   "tab_alternatives": "Alternatives",
+  "label_literal": "Literal",
+  "label_nuance": "Nuance",
 
   "copy_btn": "Copy",
   "copy_done": "Copied ✓",

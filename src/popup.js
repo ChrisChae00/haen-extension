@@ -16,7 +16,7 @@ function el(tag, { cls, text, attrs } = {}) {
 let currentDir = 'auto';
 let currentTheme = 'auto';
 let lastResult = null;
-let activeTab = 'literal';
+let activeTab = 'translation';
 let settingsOpen = false;
 let isTranslating = false;
 
@@ -274,10 +274,10 @@ function doTranslate(text) {
 // ── Result rendering ──────────────────────────────────────────────────────────
 function renderResult(result) {
   lastResult = result;
-  activeTab = 'literal';
+  activeTab = 'translation';
   resultTabs.querySelectorAll('.result-tab').forEach(b =>
-    b.classList.toggle('active', b.dataset.tab === 'literal'));
-  showTab('literal');
+    b.classList.toggle('active', b.dataset.tab === 'translation'));
+  showTab('translation');
 
   if (currentDir === 'auto') {
     autoBadge.textContent = t('auto_detected', {
@@ -306,19 +306,23 @@ function showTab(tab) {
   const r = lastResult;
   resultContent.textContent = '';
 
-  if (tab === 'literal') {
-    const p = el('p', { text: r.literal });
-    p.style.cssText = 'font-size:15px;line-height:1.7;color:var(--color-ink-900);margin-bottom:12px;';
-    const row = el('div', { cls: 'copy-row' });
-    row.appendChild(makeCopyBtn(r.literal, 'btn-copy'));
-    resultContent.append(p, row);
+  if (tab === 'translation') {
+    const literalLabel = el('div', { cls: 'result-section-label', text: t('label_literal') });
+    const literalText = el('p', { text: r.literal });
+    literalText.style.cssText = 'font-size:15px;line-height:1.7;color:var(--color-ink-900);margin-bottom:8px;';
+    const copyRow = el('div', { cls: 'copy-row' });
+    copyRow.appendChild(makeCopyBtn(r.literal, 'btn-copy'));
 
-  } else if (tab === 'nuance') {
-    const badge = el('div', { cls: 'nuance-badge' });
-    badge.appendChild(el('span', { cls: 'badge badge-lang', text: `${r.detected_lang} → ${r.target_lang}` }));
-    const p = el('p', { text: r.nuance });
-    p.style.cssText = 'font-size:13px;line-height:1.75;color:var(--color-ink-900);margin-top:10px;';
-    resultContent.append(badge, p);
+    const divider = el('div', { cls: 'result-divider' });
+
+    const nuanceLabel = el('div', { cls: 'result-section-label' });
+    const langBadge = el('span', { cls: 'badge badge-lang', text: `${r.detected_lang} → ${r.target_lang}` });
+    const nuanceLabelText = el('span', { text: t('label_nuance') });
+    nuanceLabel.append(nuanceLabelText, langBadge);
+    const nuanceText = el('p', { text: r.nuance });
+    nuanceText.style.cssText = 'font-size:13px;line-height:1.75;color:var(--color-ink-900);margin-top:8px;';
+
+    resultContent.append(literalLabel, literalText, copyRow, divider, nuanceLabel, nuanceText);
 
   } else if (tab === 'alternatives') {
     r.alternatives.forEach(alt => {

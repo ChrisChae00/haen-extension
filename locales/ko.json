@@ -11,9 +11,10 @@
   "btn_translate": "번역하기 →",
   "btn_translating": "번역 중...",
 
-  "tab_literal": "직역",
-  "tab_nuance": "뉘앙스",
+  "tab_translation": "번역",
   "tab_alternatives": "대체표현",
+  "label_literal": "직역",
+  "label_nuance": "뉘앙스",
 
   "copy_btn": "복사",
   "copy_done": "복사됨 ✓",
