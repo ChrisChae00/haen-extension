@@ -38,7 +38,8 @@
 
   "settings_prefs": "환경설정",
   "pref_default_dir": "기본 번역 방향",
-  "pref_ui_lang": "UI 기본 언어",
+  "pref_main_lang": "메인 언어",
+  "pref_main_lang_help": "KO 선택 시 답변은 한국어로, 영미권 문화·표현을 기준으로 설명합니다. EN 선택 시 답변은 영어로, 한국 문화·표현을 기준으로 설명합니다.",
   "pref_dark_mode": "다크모드",
   "pref_dark_hint": "어두운 테마 사용",
   "pref_auto_copy": "결과 자동 복사",
