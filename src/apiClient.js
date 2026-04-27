@@ -1,10 +1,32 @@
 import { buildSystemPrompt } from './prompts.js';
 
-export const MODELS = {
-  llama4: 'meta-llama/llama-4-scout-17b-16e-instruct',
-  qwen3: 'qwen/qwen3-32b',
-  gemma2: 'gemma2-9b-it',
+const ENDPOINTS = {
+  groq:       'https://api.groq.com/openai/v1/chat/completions',
+  openrouter: 'https://openrouter.ai/api/v1/chat/completions',
 };
+
+const MODEL_IDS = {
+  groq: {
+    llama4:   'meta-llama/llama-4-scout-17b-16e-instruct',
+    llama70b: 'llama-3.3-70b-versatile',
+    kimi:     'moonshotai/kimi-k2-instruct',
+    qwen3:    'qwen/qwen3-32b',
+    gemma2:   'gemma2-9b-it',
+  },
+  openrouter: {
+    llama4:   'meta-llama/llama-4-scout',
+    llama70b: 'meta-llama/llama-3.3-70b-instruct',
+    kimi:     'moonshotai/kimi-k2',
+    qwen3:    'qwen/qwen3-32b',
+    gemma2:   'google/gemma-2-9b-it',
+  },
+};
+
+export const DEFAULT_MODEL_KEY = 'llama4';
+
+function detectProvider(apiKey) {
+  return apiKey?.startsWith('sk-or-') ? 'openrouter' : 'groq';
+}
 
 export class RateLimitError extends Error {
   constructor() { super('Rate limit exceeded'); this.name = 'RateLimitError'; }
@@ -19,7 +41,6 @@ export class InvalidResponseError extends Error {
   constructor(msg = 'Unexpected response format') { super(msg); this.name = 'InvalidResponseError'; }
 }
 
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 30_000;
 
 function parseSSELine(line) {
@@ -42,38 +63,38 @@ function extractResultFromJson(raw) {
 }
 
 export class TranslatorAPI {
-  constructor(provider = 'groq') {
-    this.provider = provider;
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, onChunk, signal } = {}) {
+    const provider = detectProvider(apiKey);
+    const model = MODEL_IDS[provider]?.[modelKey] ?? MODEL_IDS.groq[DEFAULT_MODEL_KEY];
+    return this._translate(text, { apiKey, uiLanguage, direction, model, provider, onChunk, signal });
   }
 
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', model = MODELS.llama4, onChunk, signal } = {}) {
-    if (this.provider === 'groq') {
-      return this._groqTranslate(text, { apiKey, uiLanguage, direction, model, onChunk, signal });
-    }
-    throw new Error(`Unknown provider: ${this.provider}`);
-  }
-
-  async _groqTranslate(text, { apiKey, uiLanguage, direction, model, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, provider, onChunk, signal }) {
     const systemPrompt = buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
 
     const timeoutController = new AbortController();
     const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
 
-    // Combine caller's signal with timeout signal
     const combined = signal
       ? AbortSignal.any([signal, timeoutController.signal])
       : timeoutController.signal;
 
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    };
+    if (provider === 'openrouter') {
+      headers['HTTP-Referer'] = 'https://github.com/ChrisChae00/haen-extension';
+      headers['X-Title'] = 'Haen Translator';
+    }
+
     let response;
     try {
-      response = await fetch(GROQ_ENDPOINT, {
+      response = await fetch(ENDPOINTS[provider], {
         method: 'POST',
         signal: combined,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
+        headers,
         body: JSON.stringify({
           model,
           messages: [

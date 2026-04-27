@@ -28,9 +28,11 @@
   "more": "더보기",
   "settings_api": "API 설정",
   "settings_api_key": "API 키",
-  "settings_api_key_placeholder": "gsk_로 시작하는 Groq API 키",
+  "settings_api_key_placeholder": "Groq(gsk_) 또는 OpenRouter(sk-or-) API 키",
   "settings_model": "모델 선택",
   "model_llama4": "Llama 4 Scout (빠름, 기본)",
+  "model_llama70b": "Llama 3.3 70B (균형)",
+  "model_kimi": "Kimi K2 (한국어 강화)",
   "model_qwen3": "Qwen3 32B (정확도 우선)",
   "model_gemma2": "Gemma 2 9B (안정적)",
 

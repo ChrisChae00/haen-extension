@@ -28,9 +28,11 @@
   "more": "More",
   "settings_api": "API Settings",
   "settings_api_key": "API Key",
-  "settings_api_key_placeholder": "Groq API key starting with gsk_",
+  "settings_api_key_placeholder": "Groq (gsk_) or OpenRouter (sk-or-) API key",
   "settings_model": "Model",
   "model_llama4": "Llama 4 Scout (Fast, Default)",
+  "model_llama70b": "Llama 3.3 70B (Balanced)",
+  "model_kimi": "Kimi K2 (Korean-enhanced)",
   "model_qwen3": "Qwen3 32B (Accuracy)",
   "model_gemma2": "Gemma 2 9B (Stable)",
 

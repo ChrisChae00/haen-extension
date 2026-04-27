@@ -104,7 +104,7 @@
             <div class="api-input-wrap">
               <input class="api-input" type="password" id="api-key-input"
                      data-i18n-placeholder="settings_api_key_placeholder"
-                     placeholder="gsk_로 시작하는 Groq API 키" />
+                     placeholder="Groq(gsk_) 또는 OpenRouter(sk-or-) API 키" />
               <button class="btn-icon-sm" id="btn-toggle-api-key"
                       data-i18n-title="settings_api_key" title="API 키">
                 <svg width="14" height="14" fill="none" viewBox="0 0 14 14">
@@ -117,9 +117,11 @@
           <div class="settings-row">
             <div class="settings-label" data-i18n="settings_model">모델 선택</div>
             <select class="settings-select" id="model-select">
-              <option value="llama4" data-i18n="model_llama4">Llama 4 Scout (빠름, 기본)</option>
-              <option value="qwen3" data-i18n="model_qwen3">Qwen3 32B (정확도 우선)</option>
-              <option value="gemma2" data-i18n="model_gemma2">Gemma 2 9B (안정적)</option>
+              <option value="llama4"   data-i18n="model_llama4">Llama 4 Scout (빠름, 기본)</option>
+              <option value="llama70b" data-i18n="model_llama70b">Llama 3.3 70B (균형)</option>
+              <option value="kimi"     data-i18n="model_kimi">Kimi K2 (한국어 강화)</option>
+              <option value="qwen3"    data-i18n="model_qwen3">Qwen3 32B (정확도 우선)</option>
+              <option value="gemma2"   data-i18n="model_gemma2">Gemma 2 9B (안정적)</option>
             </select>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { TranslatorAPI, MODELS, RateLimitError, NetworkError, InvalidKeyError, InvalidResponseError } from './src/apiClient.js';
+import { TranslatorAPI, DEFAULT_MODEL_KEY, RateLimitError, NetworkError, InvalidKeyError, InvalidResponseError } from './src/apiClient.js';
 import { getApiKey, getModel, getUILanguage } from './src/storage.js';
 
 function mapErrorToI18nKey(e) {
@@ -27,17 +27,16 @@ chrome.runtime.onConnect.addListener(port => {
       return;
     }
 
-    const modelKey = await getModel();
-    const model = MODELS[modelKey] ?? MODELS.llama4;
+    const modelKey = await getModel() ?? DEFAULT_MODEL_KEY;
     const uiLanguage = await getUILanguage();
 
-    const api = new TranslatorAPI('groq');
+    const api = new TranslatorAPI();
     try {
       const result = await api.translate(text, {
         apiKey,
         uiLanguage,
         direction,
-        model,
+        modelKey,
         signal: abortController.signal,
         onChunk: chunk => {
           if (!abortController.signal.aborted) port.postMessage({ type: 'chunk', text: chunk });
@@ -67,13 +66,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       return;
     }
 
-    const modelKey = await getModel();
-    const model = MODELS[modelKey] ?? MODELS.llama4;
+    const modelKey = await getModel() ?? DEFAULT_MODEL_KEY;
     const uiLanguage = await getUILanguage();
 
-    const api = new TranslatorAPI('groq');
+    const api = new TranslatorAPI();
     try {
-      const result = await api.translate(text, { apiKey, uiLanguage, direction, model });
+      const result = await api.translate(text, { apiKey, uiLanguage, direction, modelKey });
       sendResponse({ type: 'done', result });
     } catch (e) {
       console.error('[Haen] translate failed:', e.name);
