@@ -341,14 +341,35 @@ textarea::placeholder { color: var(--color-ink-300); }
 .btn-copy-mini:hover { color: var(--color-accent); border-color: var(--color-accent); }
 .btn-copy-mini:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 
+/* ── LITERAL NOTE ── */
+.literal-note {
+  font-size: var(--text-sm); font-style: italic;
+  color: var(--color-ink-300); line-height: 1.6;
+  margin-bottom: var(--space-2);
+}
+
 /* ── TIP CARD ── */
 .tip-card {
   background: var(--color-surface-2);
   border-radius: var(--radius-md);
   padding: 10px 14px; margin-top: var(--space-3);
-  font-size: var(--text-sm); color: var(--color-ink-500);
+  font-size: var(--text-sm); color: var(--color-ink-500); line-height: 1.65;
 }
 .tip-label { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-ink-300); margin-bottom: var(--space-1); font-family: var(--font-mono); }
+
+/* ── ALT GROUP ── */
+.alt-group { margin-bottom: var(--space-4); }
+.alt-group:last-child { margin-bottom: 0; }
+.alt-group-label {
+  display: inline-block; font-size: 10px; font-weight: var(--weight-semibold);
+  font-family: var(--font-sans); letter-spacing: 0.3px;
+  padding: 3px 10px; border-radius: var(--radius-full);
+  margin-bottom: var(--space-2); border: 1px solid currentColor;
+}
+.register-neutral  { color: var(--color-accent);  background: var(--color-accent-tint); }
+.register-casual   { color: var(--color-success); background: var(--color-success-tint); }
+.register-formal   { color: var(--color-ink-500); background: var(--color-surface-2); border-color: var(--color-border) !important; }
+.register-contextual { color: var(--color-warning); background: var(--color-warning-tint); }
 
 /* ── SETTINGS ── */
 .settings-body { padding: 12px 0; overflow-y: auto; flex: 1; }

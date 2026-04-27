@@ -204,6 +204,13 @@ textarea.addEventListener('input', () => {
   btnTranslate.disabled = trimmedLen === 0 || len > 500 || isTranslating;
 });
 
+textarea.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    if (!btnTranslate.disabled) btnTranslate.click();
+  }
+});
+
 // ── Translate ─────────────────────────────────────────────────────────────────
 btnTranslate.addEventListener('click', () => {
   if (isTranslating) return;
@@ -261,7 +268,7 @@ function doTranslate(text) {
       });
       stor('history').then(history => {
         const h = history ?? [];
-        h.unshift({ text, result: msg.result, dir: currentDir, ts: Date.now() });
+        h.unshift({ text, result: lastResult, dir: currentDir, ts: Date.now() });
         if (h.length > 50) h.length = 50;
         storSet({ history: h });
       });
@@ -280,9 +287,20 @@ function doTranslate(text) {
   });
 }
 
+// ── Normalize legacy flat-alternatives format ─────────────────────────────────
+function normalizeResult(r) {
+  if (!r || !Array.isArray(r.alternatives)) return r;
+  if (r.alternatives.length === 0 || typeof r.alternatives[0] === 'string') {
+    r.alternatives = r.alternatives.length
+      ? [{ label: t('label_alternatives'), register: 'neutral', expressions: r.alternatives }]
+      : [];
+  }
+  return r;
+}
+
 // ── Result rendering ──────────────────────────────────────────────────────────
 function renderResult(result) {
-  lastResult = result;
+  lastResult = normalizeResult(result);
   activeTab = 'translation';
   resultTabs.querySelectorAll('.result-tab').forEach(b =>
     b.classList.toggle('active', b.dataset.tab === 'translation'));
@@ -322,23 +340,41 @@ function showTab(tab) {
     const copyRow = el('div', { cls: 'copy-row' });
     copyRow.appendChild(makeCopyBtn(r.literal, 'btn-copy'));
 
-    const divider = el('div', { cls: 'result-divider' });
+    resultContent.append(literalLabel, literalText);
+
+    if (r.literal_note) {
+      const note = el('p', { cls: 'literal-note', text: r.literal_note });
+      resultContent.appendChild(note);
+    }
+
+    resultContent.appendChild(copyRow);
+    resultContent.appendChild(el('div', { cls: 'result-divider' }));
 
     const nuanceLabel = el('div', { cls: 'result-section-label' });
     const langBadge = el('span', { cls: 'badge badge-lang', text: `${r.detected_lang} → ${r.target_lang}` });
-    const nuanceLabelText = el('span', { text: t('label_nuance') });
-    nuanceLabel.append(nuanceLabelText, langBadge);
+    nuanceLabel.append(el('span', { text: t('label_nuance') }), langBadge);
     const nuanceText = el('p', { text: r.nuance });
     nuanceText.style.cssText = 'font-size:13px;line-height:1.75;color:var(--color-ink-900);margin-top:8px;';
+    resultContent.append(nuanceLabel, nuanceText);
 
-    resultContent.append(literalLabel, literalText, copyRow, divider, nuanceLabel, nuanceText);
+    if (r.tip) {
+      const tipBox = el('div', { cls: 'tip-card' });
+      tipBox.appendChild(el('div', { cls: 'tip-label', text: `💡 ${t('label_tip')}` }));
+      tipBox.appendChild(el('p', { text: r.tip }));
+      resultContent.appendChild(tipBox);
+    }
 
   } else if (tab === 'alternatives') {
-    r.alternatives.forEach(alt => {
-      const item = el('div', { cls: 'alt-item' });
-      item.appendChild(el('span', { cls: 'alt-text', text: alt }));
-      item.appendChild(makeCopyBtn(alt, 'btn-copy-mini'));
-      resultContent.appendChild(item);
+    r.alternatives.forEach(group => {
+      const groupEl = el('div', { cls: 'alt-group' });
+      groupEl.appendChild(el('div', { cls: `alt-group-label register-${group.register ?? 'neutral'}`, text: group.label }));
+      group.expressions.forEach(expr => {
+        const item = el('div', { cls: 'alt-item' });
+        item.appendChild(el('span', { cls: 'alt-text', text: expr }));
+        item.appendChild(makeCopyBtn(expr, 'btn-copy-mini'));
+        groupEl.appendChild(item);
+      });
+      resultContent.appendChild(groupEl);
     });
   }
 }

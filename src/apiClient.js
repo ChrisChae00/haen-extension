@@ -83,7 +83,7 @@ export class TranslatorAPI {
           response_format: { type: 'json_object' },
           stream: useStream,
           temperature: 0.3,
-          max_tokens: 512,
+          max_tokens: 1024,
         }),
       });
     } catch (e) {
