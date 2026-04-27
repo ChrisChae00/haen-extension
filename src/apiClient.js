@@ -24,6 +24,9 @@ const MODEL_IDS = {
 
 export const DEFAULT_MODEL_KEY = 'llama4';
 
+// Kimi K2 doesn't support response_format: json_object — prompt-only is sufficient
+const NO_JSON_MODE = new Set(['kimi']);
+
 function detectProvider(apiKey) {
   return apiKey?.startsWith('sk-or-') ? 'openrouter' : 'groq';
 }
@@ -49,15 +52,28 @@ function parseSSELine(line) {
 }
 
 function extractResultFromJson(raw) {
-  const trimmed = raw.trim();
+  let text = raw.trim();
+
+  // Strip markdown code fences some models add (```json ... ``` or ``` ... ```)
+  const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)```$/);
+  if (fenceMatch) text = fenceMatch[1].trim();
+
+  // Extract first JSON object if model adds prose before/after
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) text = objMatch[0];
+
+  console.log('[Haen] raw response:', text.slice(0, 300));
+
   try {
-    const parsed = JSON.parse(trimmed);
-    if (!parsed.literal || !parsed.nuance || !Array.isArray(parsed.alternatives)) {
+    const parsed = JSON.parse(text);
+    if (typeof parsed.literal !== 'string' || typeof parsed.nuance !== 'string' || !Array.isArray(parsed.alternatives)) {
+      console.error('[Haen] missing fields:', { literal: parsed.literal, nuance: parsed.nuance, alternatives: parsed.alternatives });
       throw new InvalidResponseError('Missing required fields in response');
     }
     return parsed;
   } catch (e) {
     if (e instanceof InvalidResponseError) throw e;
+    console.error('[Haen] JSON parse failed on:', text.slice(0, 200));
     throw new InvalidResponseError('Failed to parse JSON response');
   }
 }
@@ -66,10 +82,10 @@ export class TranslatorAPI {
   async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, onChunk, signal } = {}) {
     const provider = detectProvider(apiKey);
     const model = MODEL_IDS[provider]?.[modelKey] ?? MODEL_IDS.groq[DEFAULT_MODEL_KEY];
-    return this._translate(text, { apiKey, uiLanguage, direction, model, provider, onChunk, signal });
+    return this._translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, onChunk, signal });
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, provider, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, onChunk, signal }) {
     const systemPrompt = buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
 
@@ -101,7 +117,7 @@ export class TranslatorAPI {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: text },
           ],
-          response_format: { type: 'json_object' },
+          ...(!NO_JSON_MODE.has(modelKey) && { response_format: { type: 'json_object' } }),
           stream: useStream,
           temperature: 0.3,
           max_tokens: 1024,

@@ -334,21 +334,22 @@ function showTab(tab) {
   resultContent.textContent = '';
 
   if (tab === 'translation') {
-    const literalLabel = el('div', { cls: 'result-section-label', text: t('label_literal') });
-    const literalText = el('p', { text: r.literal });
-    literalText.style.cssText = 'font-size:15px;line-height:1.7;color:var(--color-ink-900);margin-bottom:8px;';
-    const copyRow = el('div', { cls: 'copy-row' });
-    copyRow.appendChild(makeCopyBtn(r.literal, 'btn-copy'));
+    if (r.literal) {
+      const literalLabel = el('div', { cls: 'result-section-label', text: t('label_literal') });
+      const literalText = el('p', { text: r.literal });
+      literalText.style.cssText = 'font-size:15px;line-height:1.7;color:var(--color-ink-900);margin-bottom:8px;';
+      const copyRow = el('div', { cls: 'copy-row' });
+      copyRow.appendChild(makeCopyBtn(r.literal, 'btn-copy'));
 
-    resultContent.append(literalLabel, literalText);
+      resultContent.append(literalLabel, literalText);
 
-    if (r.literal_note) {
-      const note = el('p', { cls: 'literal-note', text: r.literal_note });
-      resultContent.appendChild(note);
+      if (r.literal_note) {
+        resultContent.appendChild(el('p', { cls: 'literal-note', text: r.literal_note }));
+      }
+
+      resultContent.appendChild(copyRow);
+      resultContent.appendChild(el('div', { cls: 'result-divider' }));
     }
-
-    resultContent.appendChild(copyRow);
-    resultContent.appendChild(el('div', { cls: 'result-divider' }));
 
     const nuanceLabel = el('div', { cls: 'result-section-label' });
     const langBadge = el('span', { cls: 'badge badge-lang', text: `${r.detected_lang} → ${r.target_lang}` });
