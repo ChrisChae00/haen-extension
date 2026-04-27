@@ -12,6 +12,9 @@ function mapErrorToI18nKey(e) {
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'translate') return;
 
+  const abortController = new AbortController();
+  port.onDisconnect.addListener(() => abortController.abort());
+
   port.onMessage.addListener(async msg => {
     if (msg.action !== 'translate') return;
 
@@ -35,14 +38,18 @@ chrome.runtime.onConnect.addListener(port => {
         uiLanguage,
         direction,
         model,
-        onChunk: chunk => port.postMessage({ type: 'chunk', text: chunk }),
+        signal: abortController.signal,
+        onChunk: chunk => {
+          if (!abortController.signal.aborted) port.postMessage({ type: 'chunk', text: chunk });
+        },
       });
-      port.postMessage({ type: 'done', result });
+      if (!abortController.signal.aborted) port.postMessage({ type: 'done', result });
     } catch (e) {
+      if (abortController.signal.aborted) return;
       console.error('[Haen] translate failed:', e.name);
       port.postMessage({ type: 'error', errorKey: mapErrorToI18nKey(e) });
     } finally {
-      port.disconnect();
+      if (!abortController.signal.aborted) port.disconnect();
     }
   });
 });

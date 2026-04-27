@@ -145,6 +145,7 @@ html, body {
   color: #888; transition: background var(--dur-normal);
 }
 .hdr-icon:hover { background: #3a3631; color: #ddd; }
+.hdr-icon:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 
 /* ── DIRECTION SEGMENT ── */
 .direction-bar { padding: 10px 14px 0; flex-shrink: 0; }
@@ -165,6 +166,7 @@ html, body {
   background: var(--color-ink-900); color: var(--color-surface); font-weight: var(--weight-medium);
 }
 .seg-ctrl button:hover:not(.active) { color: var(--color-ink-500); background: var(--color-surface-2); }
+.seg-ctrl button:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: -2px; }
 
 /* ── INPUT ── */
 .input-area { padding: 10px 14px 0; flex-shrink: 0; }
@@ -197,6 +199,7 @@ textarea::placeholder { color: var(--color-ink-300); }
 }
 .btn-translate:hover { background: var(--color-accent-dk); }
 .btn-translate:active { transform: scale(.98); }
+.btn-translate:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 .btn-translate:disabled { background: var(--color-border); color: var(--color-ink-300); cursor: not-allowed; transform: none; }
 .btn-translate.loading { background: var(--color-accent); opacity: .8; cursor: not-allowed; }
 
@@ -219,6 +222,7 @@ textarea::placeholder { color: var(--color-ink-300); }
   font-family: var(--font-sans);
 }
 .result-tab:hover { color: var(--color-ink-500); }
+.result-tab:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: -2px; border-radius: var(--radius-xs); }
 .result-tab.active { color: var(--color-accent); border-bottom-color: var(--color-accent); font-weight: var(--weight-medium); }
 .result-content {
   flex: 1; padding: 14px 16px; position: relative;
@@ -241,6 +245,7 @@ textarea::placeholder { color: var(--color-ink-300); }
   display: flex; align-items: center; gap: 5px;
 }
 .btn-copy:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.btn-copy:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 .btn-copy.copied { border-color: var(--color-success); color: var(--color-success); background: var(--color-success-tint); }
 
 /* ── SHIMMER ── */
@@ -282,6 +287,7 @@ textarea::placeholder { color: var(--color-ink-300); }
   transition: all var(--dur-normal);
 }
 .btn-retry:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.btn-retry:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 .btn-go-settings {
   flex: 1; height: 36px; background: var(--color-ink-900);
   border: none; border-radius: var(--radius-md);
@@ -290,6 +296,7 @@ textarea::placeholder { color: var(--color-ink-300); }
   transition: opacity var(--dur-normal);
 }
 .btn-go-settings:hover { opacity: .85; }
+.btn-go-settings:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 
 /* ── RESULT SECTIONS ── */
 .result-section-label {
@@ -332,6 +339,7 @@ textarea::placeholder { color: var(--color-ink-300); }
   transition: all var(--dur-normal);
 }
 .btn-copy-mini:hover { color: var(--color-accent); border-color: var(--color-accent); }
+.btn-copy-mini:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 
 /* ── TIP CARD ── */
 .tip-card {
@@ -386,14 +394,16 @@ textarea::placeholder { color: var(--color-ink-300); }
   color: var(--color-ink-300); transition: all var(--dur-normal); flex-shrink: 0;
 }
 .btn-icon-sm:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.btn-icon-sm:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 
 /* Toggle */
 .toggle {
   width: 38px; height: 20px; border-radius: var(--radius-full);
   background: var(--color-border); position: relative;
   cursor: pointer; transition: background var(--dur-normal);
-  flex-shrink: 0; border: none; padding: 0; outline: none;
+  flex-shrink: 0; border: none; padding: 0;
 }
+.toggle:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 .toggle.on { background: var(--color-accent); }
 .toggle::after {
   content: ''; position: absolute; top: 2px; left: 2px;
@@ -414,6 +424,7 @@ textarea::placeholder { color: var(--color-ink-300); }
   cursor: pointer; transition: opacity var(--dur-normal);
 }
 .btn-save:hover { opacity: .85; }
+.btn-save:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 .about-line {
   text-align: center; font-family: var(--font-mono); font-size: 10px;
   color: var(--color-ink-300); margin-top: 10px;

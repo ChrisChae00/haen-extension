@@ -20,15 +20,11 @@ export class InvalidResponseError extends Error {
 }
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+const REQUEST_TIMEOUT_MS = 30_000;
 
-function parseSSEChunks(text) {
-  return text
-    .split('\n')
-    .filter(line => line.startsWith('data: ') && line !== 'data: [DONE]')
-    .map(line => {
-      try { return JSON.parse(line.slice(6)); } catch { return null; }
-    })
-    .filter(Boolean);
+function parseSSELine(line) {
+  if (!line.startsWith('data: ') || line === 'data: [DONE]') return null;
+  try { return JSON.parse(line.slice(6)); } catch { return null; }
 }
 
 function extractResultFromJson(raw) {
@@ -50,21 +46,30 @@ export class TranslatorAPI {
     this.provider = provider;
   }
 
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', model = MODELS.llama4, onChunk } = {}) {
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', model = MODELS.llama4, onChunk, signal } = {}) {
     if (this.provider === 'groq') {
-      return this._groqTranslate(text, { apiKey, uiLanguage, direction, model, onChunk });
+      return this._groqTranslate(text, { apiKey, uiLanguage, direction, model, onChunk, signal });
     }
     throw new Error(`Unknown provider: ${this.provider}`);
   }
 
-  async _groqTranslate(text, { apiKey, uiLanguage, direction, model, onChunk }) {
+  async _groqTranslate(text, { apiKey, uiLanguage, direction, model, onChunk, signal }) {
     const systemPrompt = buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
+
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+
+    // Combine caller's signal with timeout signal
+    const combined = signal
+      ? AbortSignal.any([signal, timeoutController.signal])
+      : timeoutController.signal;
 
     let response;
     try {
       response = await fetch(GROQ_ENDPOINT, {
         method: 'POST',
+        signal: combined,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
@@ -81,16 +86,19 @@ export class TranslatorAPI {
           max_tokens: 512,
         }),
       });
-    } catch {
+    } catch (e) {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') throw new NetworkError('Request aborted');
       throw new NetworkError();
     }
+    clearTimeout(timeoutId);
 
     if (response.status === 401 || response.status === 403) throw new InvalidKeyError();
     if (response.status === 429) throw new RateLimitError();
     if (!response.ok) throw new NetworkError(`HTTP ${response.status}`);
 
     if (useStream) {
-      return this._handleStream(response, onChunk);
+      return this._handleStream(response, onChunk, combined);
     }
 
     let json;
@@ -105,27 +113,37 @@ export class TranslatorAPI {
     return extractResultFromJson(raw);
   }
 
-  async _handleStream(response, onChunk) {
+  async _handleStream(response, onChunk, signal) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let accumulated = '';
+    let lineBuffer = '';
     let contentAccumulated = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      accumulated += decoder.decode(value, { stream: true });
-      const chunks = parseSSEChunks(accumulated);
-      accumulated = '';
+        lineBuffer += decoder.decode(value, { stream: true });
 
-      for (const chunk of chunks) {
-        const delta = chunk.choices?.[0]?.delta?.content;
-        if (delta) {
-          contentAccumulated += delta;
-          onChunk(contentAccumulated);
+        // Only consume complete lines; keep any trailing partial line in buffer
+        const newlineIdx = lineBuffer.lastIndexOf('\n');
+        if (newlineIdx === -1) continue;
+
+        const completeLines = lineBuffer.slice(0, newlineIdx).split('\n');
+        lineBuffer = lineBuffer.slice(newlineIdx + 1);
+
+        for (const line of completeLines) {
+          const chunk = parseSSELine(line.trim());
+          const delta = chunk?.choices?.[0]?.delta?.content;
+          if (delta) {
+            contentAccumulated += delta;
+            onChunk(contentAccumulated);
+          }
         }
       }
+    } finally {
+      reader.releaseLock();
     }
 
     if (!contentAccumulated) throw new InvalidResponseError('Empty stream response');

@@ -19,6 +19,7 @@ let lastResult = null;
 let activeTab = 'translation';
 let settingsOpen = false;
 let isTranslating = false;
+let currentAbortController = null;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -197,9 +198,10 @@ dirSeg.addEventListener('click', e => {
 // ── Textarea + char counter ───────────────────────────────────────────────────
 textarea.addEventListener('input', () => {
   const len = textarea.value.length;
+  const trimmedLen = textarea.value.trim().length;
   charCounter.textContent = t('char_counter', { current: len, max: 500 });
   charCounter.classList.toggle('over', len > 500);
-  btnTranslate.disabled = len === 0 || len > 500 || isTranslating;
+  btnTranslate.disabled = trimmedLen === 0 || len > 500 || isTranslating;
 });
 
 // ── Translate ─────────────────────────────────────────────────────────────────
@@ -233,13 +235,20 @@ function showShimmer(count) {
 }
 
 function doTranslate(text) {
+  if (currentAbortController) currentAbortController.abort();
+  currentAbortController = new AbortController();
+  const { signal } = currentAbortController;
+
   setTranslating(true);
   let firstChunk = true;
 
   const port = chrome.runtime.connect({ name: 'translate' });
   port.postMessage({ action: 'translate', text, direction: DIR_TO_API[currentDir] });
 
+  signal.addEventListener('abort', () => port.disconnect(), { once: true });
+
   port.onMessage.addListener(async msg => {
+    if (signal.aborted) return;
     if (msg.type === 'chunk' && firstChunk) {
       firstChunk = false;
       showShimmer(1);
@@ -264,7 +273,7 @@ function doTranslate(text) {
   });
 
   port.onDisconnect.addListener(() => {
-    if (isTranslating) {
+    if (isTranslating && !signal.aborted) {
       setTranslating(false);
       renderError('error_server', text);
     }
