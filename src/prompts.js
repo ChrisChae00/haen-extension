@@ -27,6 +27,7 @@ Respond ONLY with valid JSON in this exact format:
 - alternatives는 2~4개 카테고리로 나누고, 각 카테고리마다 1~3개의 expressions를 담아라.
 - expressions의 모든 표현은 원어민이 실제 일상 대화에서 쓰는 말이어야 한다. 어색한 직역체는 절대 넣지 말 것.
 - 카테고리 label은 입력 문장의 성격에 맞게 동적으로 생성하라.
+- 한국어로 작성하는 모든 필드(literal, literal_note, nuance, tip, label)에는 한글과 영문자만 사용한다. 한자(漢字)나 중국어 간체자·번체자는 절대 포함하지 말 것.
 Output must be pure JSON — no markdown, no code fences, no prose.`,
 
   // Main language = EN: user is a native English speaker learning Korean expressions.
