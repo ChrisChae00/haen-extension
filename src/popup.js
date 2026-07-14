@@ -1,3 +1,5 @@
+import { parsePartial } from './apiClient.js';
+
 // Direction value maps between popup.html (data-dir) and background/storage formats
 const DIR_TO_API    = { 'ko-en': 'ko_to_en', 'en-ko': 'en_to_ko', 'auto': 'auto' };
 const DIR_FROM_STOR = { 'ko_to_en': 'ko-en', 'en_to_ko': 'en-ko', 'auto': 'auto' };
@@ -247,7 +249,6 @@ function doTranslate(text) {
   const { signal } = currentAbortController;
 
   setTranslating(true);
-  let firstChunk = true;
 
   const port = chrome.runtime.connect({ name: 'translate' });
   port.postMessage({ action: 'translate', text, direction: DIR_TO_API[currentDir] });
@@ -256,15 +257,20 @@ function doTranslate(text) {
 
   port.onMessage.addListener(async msg => {
     if (signal.aborted) return;
-    if (msg.type === 'chunk' && firstChunk) {
-      firstChunk = false;
-      showShimmer(1);
+    if (msg.type === 'chunk') {
+      // Render whatever complete fields have arrived so far — natural usually
+      // finishes long before nuance/alternatives, so the user sees a result
+      // almost immediately instead of waiting for the full JSON to land.
+      const partial = parsePartial(msg.text);
+      if (partial.natural || partial.nuance || partial.tip) {
+        renderTranslationTab(partial);
+      }
     }
     if (msg.type === 'done') {
       setTranslating(false);
       renderResult(msg.result);
       stor('autoCopy').then(autoCopy => {
-        if (autoCopy) navigator.clipboard.writeText(msg.result.literal).catch(() => {});
+        if (autoCopy) navigator.clipboard.writeText(msg.result.natural).catch(() => {});
       });
       stor('history').then(history => {
         const h = history ?? [];
@@ -328,44 +334,55 @@ function makeCopyBtn(copyText, cls) {
   return btn;
 }
 
-function showTab(tab) {
-  if (!lastResult) return;
-  const r = lastResult;
+// Renders the "translation" tab body (natural / literal note / nuance / tip) from
+// either a complete result or a partial one still streaming in — fields that haven't
+// arrived yet are simply omitted rather than shown as empty/undefined.
+function renderTranslationTab(r) {
   resultContent.textContent = '';
 
-  if (tab === 'translation') {
+  if (r.natural) {
+    const naturalLabel = el('div', { cls: 'result-section-label', text: t('label_translation') });
+    const naturalText = el('p', { text: r.natural });
+    naturalText.style.cssText = 'font-size:15px;line-height:1.7;color:var(--color-ink-900);margin-bottom:8px;';
+    resultContent.append(naturalLabel, naturalText);
+
+    // "literal" is only present when the source was an idiom/figurative expression —
+    // shown as a small secondary note, never as the headline translation.
     if (r.literal) {
-      const literalLabel = el('div', { cls: 'result-section-label', text: t('label_literal') });
-      const literalText = el('p', { text: r.literal });
-      literalText.style.cssText = 'font-size:15px;line-height:1.7;color:var(--color-ink-900);margin-bottom:8px;';
-      const copyRow = el('div', { cls: 'copy-row' });
-      copyRow.appendChild(makeCopyBtn(r.literal, 'btn-copy'));
-
-      resultContent.append(literalLabel, literalText);
-
-      if (r.literal_note) {
-        resultContent.appendChild(el('p', { cls: 'literal-note', text: r.literal_note }));
-      }
-
-      resultContent.appendChild(copyRow);
-      resultContent.appendChild(el('div', { cls: 'result-divider' }));
+      resultContent.appendChild(el('p', { cls: 'literal-note', text: `${t('label_literal')}: ${r.literal}` }));
     }
 
+    const copyRow = el('div', { cls: 'copy-row' });
+    copyRow.appendChild(makeCopyBtn(r.natural, 'btn-copy'));
+    resultContent.appendChild(copyRow);
+    resultContent.appendChild(el('div', { cls: 'result-divider' }));
+  }
+
+  if (r.nuance) {
     const nuanceLabel = el('div', { cls: 'result-section-label' });
-    const langBadge = el('span', { cls: 'badge badge-lang', text: `${r.detected_lang} → ${r.target_lang}` });
+    const langBadge = el('span', { cls: 'badge badge-lang', text: `${r.detected_lang ?? '?'} → ${r.target_lang ?? '?'}` });
     nuanceLabel.append(el('span', { text: t('label_nuance') }), langBadge);
     const nuanceText = el('p', { text: r.nuance });
     nuanceText.style.cssText = 'font-size:13px;line-height:1.75;color:var(--color-ink-900);margin-top:8px;';
     resultContent.append(nuanceLabel, nuanceText);
+  }
 
-    if (r.tip) {
-      const tipBox = el('div', { cls: 'tip-card' });
-      tipBox.appendChild(el('div', { cls: 'tip-label', text: `💡 ${t('label_tip')}` }));
-      tipBox.appendChild(el('p', { text: r.tip }));
-      resultContent.appendChild(tipBox);
-    }
+  if (r.tip) {
+    const tipBox = el('div', { cls: 'tip-card' });
+    tipBox.appendChild(el('div', { cls: 'tip-label', text: `💡 ${t('label_tip')}` }));
+    tipBox.appendChild(el('p', { text: r.tip }));
+    resultContent.appendChild(tipBox);
+  }
+}
 
+function showTab(tab) {
+  if (!lastResult) return;
+  const r = lastResult;
+
+  if (tab === 'translation') {
+    renderTranslationTab(r);
   } else if (tab === 'alternatives') {
+    resultContent.textContent = '';
     r.alternatives.forEach(group => {
       const groupEl = el('div', { cls: 'alt-group' });
       groupEl.appendChild(el('div', { cls: `alt-group-label register-${group.register ?? 'neutral'}`, text: group.label }));

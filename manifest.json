@@ -4,7 +4,11 @@
   "version": "0.1.0",
   "description": "Smart Korean ↔ English translator with nuance explanation and alternative expressions",
   "permissions": ["storage", "activeTab"],
-  "host_permissions": ["https://api.groq.com/*"],
+  "host_permissions": [
+    "https://api.groq.com/*",
+    "https://openrouter.ai/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"

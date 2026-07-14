@@ -40,3 +40,28 @@ export const clearHistory = () => _set('history', []);
 
 export const getAutoCopy = () => _get('autoCopy', false);
 export const setAutoCopy = val => _set('autoCopy', val);
+
+// ── Response cache ───────────────────────────────────────────────────────────
+// Keyed on the exact inputs that affect the model's output, so a repeat
+// translation is served instantly instead of re-hitting the API.
+const CACHE_MAX = 100;
+
+const cacheKey = ({ text, direction, modelKey, uiLanguage }) =>
+  `${uiLanguage}|${direction}|${modelKey}|${text}`;
+
+export const getCached = async ({ text, direction, modelKey, uiLanguage }) => {
+  const cache = await _get('cache', {});
+  return cache[cacheKey({ text, direction, modelKey, uiLanguage })]?.result ?? null;
+};
+
+export const setCached = async ({ text, direction, modelKey, uiLanguage, result }) => {
+  const cache = await _get('cache', {});
+  cache[cacheKey({ text, direction, modelKey, uiLanguage })] = { result, ts: Date.now() };
+
+  const keys = Object.keys(cache);
+  if (keys.length > CACHE_MAX) {
+    const oldestKey = keys.reduce((a, b) => (cache[a].ts <= cache[b].ts ? a : b));
+    delete cache[oldestKey];
+  }
+  await _set('cache', cache);
+};

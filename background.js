@@ -1,5 +1,5 @@
 import { TranslatorAPI, DEFAULT_MODEL_KEY, RateLimitError, NetworkError, InvalidKeyError, InvalidResponseError } from './src/apiClient.js';
-import { getApiKey, getModel, getUILanguage } from './src/storage.js';
+import { getApiKey, getModel, getUILanguage, getCached, setCached } from './src/storage.js';
 
 function mapErrorToI18nKey(e) {
   if (e instanceof InvalidKeyError) return 'error_api_key_title';
@@ -30,6 +30,14 @@ chrome.runtime.onConnect.addListener(port => {
     const modelKey = await getModel() ?? DEFAULT_MODEL_KEY;
     const uiLanguage = await getUILanguage();
 
+    const cacheParams = { text, direction, modelKey, uiLanguage };
+    const cached = await getCached(cacheParams);
+    if (cached) {
+      if (!abortController.signal.aborted) port.postMessage({ type: 'done', result: cached });
+      port.disconnect();
+      return;
+    }
+
     const api = new TranslatorAPI();
     try {
       const result = await api.translate(text, {
@@ -42,7 +50,10 @@ chrome.runtime.onConnect.addListener(port => {
           if (!abortController.signal.aborted) port.postMessage({ type: 'chunk', text: chunk });
         },
       });
-      if (!abortController.signal.aborted) port.postMessage({ type: 'done', result });
+      if (!abortController.signal.aborted) {
+        port.postMessage({ type: 'done', result });
+        setCached({ ...cacheParams, result });
+      }
     } catch (e) {
       if (abortController.signal.aborted) return;
       console.error('[Haen] translate failed:', e.name);
@@ -69,10 +80,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const modelKey = await getModel() ?? DEFAULT_MODEL_KEY;
     const uiLanguage = await getUILanguage();
 
+    const cacheParams = { text, direction, modelKey, uiLanguage };
+    const cached = await getCached(cacheParams);
+    if (cached) {
+      sendResponse({ type: 'done', result: cached });
+      return;
+    }
+
     const api = new TranslatorAPI();
     try {
       const result = await api.translate(text, { apiKey, uiLanguage, direction, modelKey });
       sendResponse({ type: 'done', result });
+      setCached({ ...cacheParams, result });
     } catch (e) {
       console.error('[Haen] translate failed:', e.name);
       sendResponse({ type: 'error', errorKey: mapErrorToI18nKey(e) });
