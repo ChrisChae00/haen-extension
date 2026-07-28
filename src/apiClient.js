@@ -230,11 +230,6 @@ export class TranslatorAPI {
             { role: 'user', content: text },
           ],
           ...(!NO_JSON_MODE.has(modelKey) && { response_format: { type: 'json_object' } }),
-          // Gemini is a "thinking" model — on Google's OpenAI-compatible endpoint its
-          // reasoning tokens eat into the completion budget unless disabled, which was
-          // causing responses to truncate before the JSON closed. Translation doesn't
-          // benefit from extended reasoning, so turn it off entirely for this provider.
-          ...(provider === 'google' && { reasoning_effort: 'none' }),
           stream: useStream,
           temperature: 0.3,
           max_tokens: 2048,

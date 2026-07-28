@@ -4,7 +4,10 @@ import { getApiKey, getModel, getUILanguage, getCached, setCached } from './src/
 function mapErrorToI18nKey(e) {
   if (e instanceof InvalidKeyError) return 'error_api_key_title';
   if (e instanceof RateLimitError) return 'error_rate_limit';
-  if (e instanceof NetworkError) return 'error_network';
+  if (e instanceof NetworkError) {
+    if (e.status !== undefined) return 'error_server';
+    return 'error_network';
+  }
   if (e instanceof InvalidResponseError) return 'error_server';
   return 'error_server';
 }
