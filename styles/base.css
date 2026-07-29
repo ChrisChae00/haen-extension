@@ -1,0 +1,91 @@
+/* styles/base.css — reset, typography, theme transition, panel shell layout.
+   Component styles live in components.css; tokens in tokens.css. */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  min-width: 320px;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+/* Theme transition — scoped to containers that actually change color, not
+   the universal selector (repainting every element on toggle is what made
+   the old transition janky). Children inherit color via normal cascade. */
+.popup,
+.popup-header,
+.direction-bar .seg-ctrl,
+.input-area textarea,
+.result-panel,
+.result-tabs,
+.settings-panel,
+.settings-card,
+.settings-select,
+.api-input,
+.btn-icon-sm,
+.toggle,
+.btn-translate,
+.btn-save,
+.hdr-icon {
+  transition: background-color var(--dur-theme) var(--ease-out),
+              color var(--dur-theme) var(--ease-out),
+              border-color var(--dur-theme) var(--ease-out);
+}
+
+/* Applied to <html> for ~1 frame on load so the initial paint doesn't
+   animate in from the wrong theme. Removed by panel.html's inline script. */
+.no-transition,
+.no-transition * {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popup,
+  .popup-header,
+  .direction-bar .seg-ctrl,
+  .input-area textarea,
+  .result-panel,
+  .result-tabs,
+  .settings-panel,
+  .settings-card,
+  .settings-select,
+  .api-input,
+  .btn-icon-sm,
+  .toggle,
+  .btn-translate,
+  .btn-save,
+  .hdr-icon {
+    transition-duration: 0ms;
+  }
+}
+
+/* ── PANEL SHELL ──
+   Side panel fills the full browser height; the result panel absorbs
+   whatever space the header and input block don't use. */
+.popup {
+  height: 100%;
+  width: 100%;
+  background: var(--surface-base);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#main-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

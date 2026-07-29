@@ -42,8 +42,10 @@
   "pref_default_dir": "Default direction",
   "pref_main_lang": "Main language",
   "pref_main_lang_help": "KO: responses in Korean, explanations based on English/Anglophone culture. EN: responses in English, explanations based on Korean culture.",
-  "pref_dark_mode": "Dark mode",
-  "pref_dark_hint": "Use dark theme",
+  "pref_theme": "Theme",
+  "theme_system": "System",
+  "theme_light": "Light",
+  "theme_dark": "Dark",
   "pref_auto_copy": "Auto-copy result",
   "pref_auto_copy_hint": "Copies automatically on completion",
 

@@ -1,6 +1,6 @@
 import { parsePartial } from './apiClient.js';
 
-// Direction value maps between popup.html (data-dir) and background/storage formats
+// Direction value maps between panel.html (data-dir) and background/storage formats
 const DIR_TO_API    = { 'ko-en': 'ko_to_en', 'en-ko': 'en_to_ko', 'auto': 'auto' };
 const DIR_FROM_STOR = { 'ko_to_en': 'ko-en', 'en_to_ko': 'en-ko', 'auto': 'auto' };
 
@@ -16,7 +16,7 @@ function el(tag, { cls, text, attrs } = {}) {
 }
 
 let currentDir = 'auto';
-let currentTheme = 'auto';
+let currentTheme = 'system'; // stored preference: 'system' | 'light' | 'dark'
 let lastResult = null;
 let activeTab = 'translation';
 let settingsOpen = false;
@@ -28,7 +28,7 @@ const $ = id => document.getElementById(id);
 const mainContent     = $('main-content');
 const settingsPanel   = $('settings-panel');
 const settingsWm      = $('settings-wordmark');
-const btnSettings     = $('btn-settings'); // gear icon → dark mode toggle
+const btnSettings     = $('btn-settings'); // gear icon → quick theme toggle
 const btnMore         = $('btn-more');     // ··· icon → settings panel
 const uiLangSeg       = $('ui-lang-seg');
 const dirSeg          = $('direction-seg');
@@ -42,10 +42,11 @@ const apiKeyInput     = $('api-key-input');
 const btnToggleKey    = $('btn-toggle-api-key');
 const modelSelect     = $('model-select');
 const defaultDirSel   = $('default-dir-select');
-const darkToggle      = $('dark-toggle');
+const themeSeg        = $('theme-seg');
 const autoCopyTog     = $('auto-copy-toggle');
 const btnSave         = $('btn-save');
 const settingsLangSeg = $('settings-lang-seg');
+const appWordmark     = $('app-wordmark');
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -56,11 +57,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     stor('theme'), stor('direction'), stor('uiLanguage'),
   ]);
 
-  const resolved = theme ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  if (!theme) await storSet({ theme: resolved });
-  currentTheme = resolved;
+  // 'auto' was the old stored value for "follow the system" — migrate it in place.
+  let pref = theme;
+  if (pref == null || pref === 'auto') {
+    pref = 'system';
+    await storSet({ theme: pref });
+  }
+  currentTheme = pref;
   applyTheme(currentTheme);
-  syncDarkToggleUI();
+  syncThemeUI();
+  document.documentElement.classList.remove('no-transition');
+
+  window.matchMedia('(prefers-color-scheme: dark)')
+    .addEventListener('change', () => {
+      if (currentTheme === 'system') applyTheme('system');
+    });
+
   currentDir = DIR_FROM_STOR[storedDir] ?? 'auto';
   setDirActive(currentDir);
 
@@ -70,9 +82,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
-function applyTheme(theme) {
-  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+// currentTheme holds the stored PREFERENCE ('system' | 'light' | 'dark');
+// resolveDark() turns that into the actual light/dark state to render.
+function resolveDark(pref) {
+  if (pref === 'dark') return true;
+  if (pref === 'light') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function applyTheme(pref) {
+  const dark = resolveDark(pref);
+  if (dark) document.documentElement.setAttribute('data-theme', 'dark');
   else document.documentElement.removeAttribute('data-theme');
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+  // Mirrored so panel.html's inline <head> script can apply the theme
+  // synchronously on next open, before chrome.storage resolves.
+  localStorage.setItem('haen-theme', pref);
 }
 
 // ── Header: UI language segment ───────────────────────────────────────────────
@@ -85,16 +110,20 @@ uiLangSeg.addEventListener('click', async e => {
   await setLanguage(lang);
 });
 
-// ── Dark mode toggle (gear icon) ──────────────────────────────────────────────
+// ── Quick theme toggle (gear icon) ────────────────────────────────────────────
+// A one-click override that always lands on an explicit light/dark — even if
+// the stored preference was "system". The 3-way choice lives in settings.
 btnSettings.addEventListener('click', async () => {
-  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  currentTheme = resolveDark(currentTheme) ? 'light' : 'dark';
   applyTheme(currentTheme);
   await storSet({ theme: currentTheme });
-  syncDarkToggleUI();
+  syncThemeUI();
 });
 
-function syncDarkToggleUI() {
-  btnSettings.style.color = currentTheme === 'dark' ? 'var(--color-accent-lt)' : '';
+function syncThemeUI() {
+  btnSettings.style.color = resolveDark(currentTheme) ? 'var(--text-accent)' : '';
+  themeSeg.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', b.dataset.theme === currentTheme));
 }
 
 // ── Settings panel toggle (··· button) ────────────────────────────────────────
@@ -105,13 +134,14 @@ async function openSettings() {
   settingsOpen = true;
   mainContent.style.display = 'none';
   settingsPanel.style.display = 'flex';
+  appWordmark.style.display = 'none';
   settingsWm.style.display = 'inline';
   uiLangSeg.style.display = 'none';
   btnMore.style.opacity = '0.5';
 
-  const [apiKey, model, storedDir, lang, theme, autoCopy] = await Promise.all([
+  const [apiKey, model, storedDir, lang, autoCopy] = await Promise.all([
     stor('apiKey'), stor('model'), stor('direction'),
-    stor('uiLanguage'), stor('theme'), stor('autoCopy'),
+    stor('uiLanguage'), stor('autoCopy'),
   ]);
 
   apiKeyInput.value = apiKey ?? '';
@@ -122,7 +152,7 @@ async function openSettings() {
   settingsLangSeg.querySelectorAll('span').forEach(s =>
     s.classList.toggle('active', s.dataset.lang === activeLang));
 
-  darkToggle.classList.toggle('on', currentTheme === 'dark');
+  syncThemeUI();
   autoCopyTog.classList.toggle('on', autoCopy === true);
 }
 
@@ -131,6 +161,7 @@ function closeSettings() {
   settingsPanel.style.display = 'none';
   mainContent.style.display = '';
   settingsWm.style.display = 'none';
+  appWordmark.style.display = '';
   uiLangSeg.style.display = '';
   btnMore.style.opacity = '';
 }
@@ -140,10 +171,12 @@ btnToggleKey.addEventListener('click', () => {
   apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
 });
 
-darkToggle.addEventListener('click', () => {
-  const on = darkToggle.classList.toggle('on');
-  currentTheme = on ? 'dark' : 'light';
+themeSeg.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-theme]');
+  if (!btn) return;
+  currentTheme = btn.dataset.theme;
   applyTheme(currentTheme);
+  syncThemeUI();
 });
 
 autoCopyTog.addEventListener('click', () => autoCopyTog.classList.toggle('on'));
@@ -159,13 +192,12 @@ btnSave.addEventListener('click', async () => {
   const key = apiKeyInput.value.trim();
   const activeLangSpan = settingsLangSeg.querySelector('span.active');
   const lang = activeLangSpan?.dataset.lang ?? 'ko';
-  const theme = darkToggle.classList.contains('on') ? 'dark' : 'light';
+  const theme = currentTheme;
   const autoCopy = autoCopyTog.classList.contains('on');
   const dir = DIR_TO_API[defaultDirSel.value] ?? 'auto';
 
-  currentTheme = theme;
   applyTheme(currentTheme);
-  syncDarkToggleUI();
+  syncThemeUI();
 
   const saves = [
     storSet({ model: modelSelect.value, direction: dir, theme, autoCopy }),
@@ -181,7 +213,10 @@ btnSave.addEventListener('click', async () => {
 
   const orig = btnSave.textContent;
   btnSave.textContent = t('save_done');
-  setTimeout(() => { btnSave.textContent = orig; }, 1500);
+  setTimeout(() => {
+    btnSave.textContent = orig;
+    closeSettings();
+  }, 600);
 });
 
 // ── Direction segment ─────────────────────────────────────────────────────────
@@ -343,7 +378,7 @@ function renderTranslationTab(r) {
   if (r.natural) {
     const naturalLabel = el('div', { cls: 'result-section-label', text: t('label_translation') });
     const naturalText = el('p', { text: r.natural });
-    naturalText.style.cssText = 'font-size:15px;line-height:1.7;color:var(--color-ink-900);margin-bottom:8px;';
+    naturalText.style.cssText = 'font-size:15px;line-height:1.7;color:var(--text-primary);margin-bottom:8px;';
     resultContent.append(naturalLabel, naturalText);
 
     // "literal" is only present when the source was an idiom/figurative expression —
@@ -363,7 +398,7 @@ function renderTranslationTab(r) {
     const langBadge = el('span', { cls: 'badge badge-lang', text: `${r.detected_lang ?? '?'} → ${r.target_lang ?? '?'}` });
     nuanceLabel.append(el('span', { text: t('label_nuance') }), langBadge);
     const nuanceText = el('p', { text: r.nuance });
-    nuanceText.style.cssText = 'font-size:13px;line-height:1.75;color:var(--color-ink-900);margin-top:8px;';
+    nuanceText.style.cssText = 'font-size:13px;line-height:1.75;color:var(--text-primary);margin-top:8px;';
     resultContent.append(nuanceLabel, nuanceText);
   }
 

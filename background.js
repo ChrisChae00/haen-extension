@@ -1,6 +1,10 @@
 import { TranslatorAPI, DEFAULT_MODEL_KEY, RateLimitError, NetworkError, InvalidKeyError, InvalidResponseError } from './src/apiClient.js';
 import { getApiKey, getModel, getUILanguage, getCached, setCached } from './src/storage.js';
 
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch(e => console.error('[Haen] failed to set side panel behavior:', e));
+
 function mapErrorToI18nKey(e) {
   if (e instanceof InvalidKeyError) return 'error_api_key_title';
   if (e instanceof RateLimitError) return 'error_rate_limit';

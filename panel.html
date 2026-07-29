@@ -3,8 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <title>Haen</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<script>
+  // Applies the theme synchronously, before first paint, so the panel never
+  // flashes the wrong theme while chrome.storage resolves asynchronously.
+  // chrome.storage stays the source of truth (written in src/popup.js);
+  // this localStorage value is a same-origin, synchronously-readable mirror.
+  (function () {
+    var pref = localStorage.getItem('haen-theme');
+    var dark = pref === 'dark' ||
+      (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    document.documentElement.classList.add('no-transition');
+  })();
+</script>
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/components.css">
 </head>
 <body>
 
@@ -14,15 +29,17 @@
   <div class="popup-header">
     <div class="header-left">
       <div class="logo-mark">
-        <svg viewBox="0 0 56 22" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;height:22px;">
-          <rect x="1" y="1" width="54" height="20" rx="6" stroke="#c4b5fd" stroke-width="1.5" fill="#c4b5fd" opacity=".05"/>
-          <rect x="1" y="1" width="54" height="20" rx="6" stroke="#c4b5fd" stroke-width="1.5" fill="none"/>
-          <text x="4"  y="16" font-family="'IBM Plex Sans KR',sans-serif" font-weight="600" font-size="13" fill="white">H</text>
-          <text x="18" y="10" font-family="'IBM Plex Sans KR',sans-serif" font-weight="600" font-size="9.5" fill="white">a</text>
-          <text x="18" y="17" font-family="'IBM Plex Sans KR',sans-serif" font-weight="600" font-size="9.5" fill="#c4b5fd">e</text>
-          <text x="28" y="16" font-family="'IBM Plex Sans KR',sans-serif" font-weight="600" font-size="13" fill="white">N</text>
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor"
+            d="M2.2,12 A6.8,6.8 0 1,0 15.8,12 A6.8,6.8 0 1,0 2.2,12 Z
+               M6.4,12 A2.6,2.6 0 1,0 11.6,12 A2.6,2.6 0 1,0 6.4,12 Z"/>
+          <path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor"
+            d="M8.2,12 A6.8,6.8 0 1,0 21.8,12 A6.8,6.8 0 1,0 8.2,12 Z
+               M12.4,12 A2.6,2.6 0 1,0 17.6,12 A2.6,2.6 0 1,0 12.4,12 Z"/>
+          <rect x="12.4" y="10.4" width="5.2" height="3.2" fill="currentColor"/>
         </svg>
       </div>
+      <span class="wordmark" id="app-wordmark">haen</span>
       <span class="wordmark" id="settings-wordmark" style="display:none;" data-i18n="settings_title">설정</span>
       <span class="auto-detect-badge" id="auto-badge" style="display:none;"></span>
     </div>
@@ -93,7 +110,7 @@
   </div><!-- /#main-content -->
 
   <!-- SETTINGS PANEL -->
-  <div id="settings-panel" style="display:none; flex-direction:column; flex:1; overflow:hidden;">
+  <div class="settings-panel" id="settings-panel" style="display:none;">
     <div class="settings-body">
       <div class="settings-section">
 
@@ -142,18 +159,20 @@
               <div class="settings-label" data-i18n="pref_main_lang">메인 언어</div>
               <div class="settings-hint" data-i18n="pref_main_lang_help">답변 언어와 문화 설명의 기준이 달라집니다</div>
             </div>
-            <div class="lang-seg" id="settings-lang-seg" style="border-color:var(--color-border);">
-              <span class="active" data-lang="ko" style="color:var(--color-ink-500);background:var(--color-surface-2);">KO</span>
-              <span data-lang="en" style="color:var(--color-ink-300);">EN</span>
+            <div class="lang-seg" id="settings-lang-seg">
+              <span class="active" data-lang="ko">KO</span>
+              <span data-lang="en">EN</span>
             </div>
           </div>
           <div class="settings-row">
             <div>
-              <div class="settings-label" data-i18n="pref_dark_mode">다크모드</div>
-              <div class="settings-hint" data-i18n="pref_dark_hint">어두운 테마 사용</div>
+              <div class="settings-label" data-i18n="pref_theme">테마</div>
             </div>
-            <button class="toggle" id="dark-toggle"
-                    data-i18n-aria="pref_dark_mode" aria-label="다크모드"></button>
+            <div class="seg-ctrl seg-ctrl-sm" id="theme-seg">
+              <button data-theme="system" data-i18n="theme_system">시스템</button>
+              <button data-theme="light" data-i18n="theme_light">라이트</button>
+              <button data-theme="dark" data-i18n="theme_dark">다크</button>
+            </div>
           </div>
           <div class="settings-row">
             <div>

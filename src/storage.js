@@ -19,7 +19,7 @@ export const setModel = modelId => _set('model', modelId);
 export const getUILanguage = () => _get('uiLanguage', 'ko');
 export const setUILanguage = lang => _set('uiLanguage', lang);
 
-export const getTheme = () => _get('theme', 'auto');
+export const getTheme = () => _get('theme', 'system');
 export const setTheme = theme => _set('theme', theme);
 
 export const getDirection = () => _get('direction', 'auto');

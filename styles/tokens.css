@@ -1,0 +1,139 @@
+/* styles/tokens.css — design tokens for Haen.
+   Role-based names only (no numeric ink-* scale) so a token's name tells you
+   where it's safe to use it. Every text/on-fill pairing here is verified by
+   scripts/check-contrast.mjs against a 4.5:1 minimum. See
+   docs/superpowers/specs/2026-07-28-design-overhaul-design.md section 4. */
+
+:root {
+  /* Surfaces — warm cream, unchanged from the original palette */
+  --surface-base:   #f7f6f3;
+  --surface:        #ffffff;
+  --surface-sunken: #f0ede8;
+  --surface-hover:  #ebe7e1;
+  --border:         #e3e0da;
+  --border-strong:  #d3cec6;
+
+  /* Text — two tiers only; a third tier can't clear 4.5:1 on this warm palette */
+  --text-primary:   #191817;
+  --text-secondary: #5c5955;
+  --nontext-muted:  #a09c96; /* icon strokes, dividers — never text */
+
+  /* Accent — purple, promoted from the former logo color */
+  --fill-accent:       oklch(48% 0.17 292);
+  --fill-accent-hover: oklch(42% 0.17 292);
+  --on-accent:         #ffffff;
+  --text-accent:       oklch(45% 0.18 292);
+  --surface-accent:    oklch(95% 0.03 292);
+
+  /* Semantic — same fill / on / text / surface structure as accent */
+  --fill-success:   oklch(37% 0.13 155);
+  --on-success:     #ffffff;
+  --text-success:   oklch(38% 0.14 155);
+  --surface-success: oklch(95% 0.04 155);
+
+  --fill-danger:    oklch(46% 0.19 25);
+  --on-danger:      #ffffff;
+  --text-danger:    oklch(45% 0.19 25);
+  --surface-danger: oklch(96% 0.03 25);
+
+  --fill-warning:   oklch(43% 0.13 72);
+  --on-warning:     #ffffff;
+  --text-warning:   oklch(40% 0.13 72);
+  --surface-warning: oklch(95% 0.05 85);
+
+  --color-border-focus: oklch(52% 0.14 292);
+
+  /* Typography */
+  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont,
+               'Apple SD Gothic Neo', 'Segoe UI', 'Malgun Gothic',
+               system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold:600;
+  --leading-tight:   1.3;
+  --leading-normal:  1.6;
+  --leading-relaxed: 1.8;
+  --tracking-tight:  -0.3px;
+  --tracking-normal: 0;
+  --tracking-wide:   0.8px;
+
+  /* Spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-full: 9999px;
+
+  /* Shadow */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,.04);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.09);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.13);
+
+  /* Animation */
+  --dur-fast:   100ms;
+  --dur-normal: 180ms;
+  --dur-theme:  220ms;
+  --dur-slow:   280ms;
+  --ease-out:    cubic-bezier(.2,.8,.4,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --surface-base:   #161514;
+  --surface:        #1e1c1a;
+  --surface-sunken: #272421;
+  --surface-hover:  #2f2b27;
+  --border:         #35322e;
+  --border-strong:  #454039;
+
+  --text-primary:   #f0ede8;
+  --text-secondary: #9a9690;
+  --nontext-muted:  #6b6762;
+
+  --fill-accent:       oklch(48% 0.17 292); /* same as light — see spec 4.7 */
+  --fill-accent-hover: oklch(54% 0.17 292);
+  --on-accent:         #ffffff;
+  --text-accent:       oklch(75% 0.13 292);
+  --surface-accent:    oklch(24% 0.05 292);
+
+  --fill-success:   oklch(37% 0.13 155);
+  --on-success:     #ffffff;
+  --text-success:   oklch(78% 0.15 155);
+  --surface-success: oklch(24% 0.05 155);
+
+  --fill-danger:    oklch(46% 0.19 25);
+  --on-danger:      #ffffff;
+  --text-danger:    oklch(78% 0.15 25);
+  --surface-danger: oklch(22% 0.06 25);
+
+  --fill-warning:   oklch(43% 0.13 72);
+  --on-warning:     #ffffff;
+  --text-warning:   oklch(80% 0.14 85);
+  --surface-warning: oklch(22% 0.06 85);
+
+  --color-border-focus: oklch(75% 0.12 292);
+
+  color-scheme: dark;
+}
