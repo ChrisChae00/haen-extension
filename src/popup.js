@@ -29,6 +29,7 @@ const mainContent     = $('main-content');
 const settingsPanel   = $('settings-panel');
 const settingsWm      = $('settings-wordmark');
 const btnSettings     = $('btn-settings'); // gear icon → quick theme toggle
+const btnSettingsIcon = $('btn-settings-icon');
 const btnMore         = $('btn-more');     // ··· icon → settings panel
 const uiLangSeg       = $('ui-lang-seg');
 const dirSeg          = $('direction-seg');
@@ -120,8 +121,14 @@ btnSettings.addEventListener('click', async () => {
   syncThemeUI();
 });
 
+const ICON_SUN = '<circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.4"/>' +
+  '<path d="M7 0.5v1.5M7 12v1.5M13.5 7H12M2 7H0.5M11.4 2.6l-1.1 1.1M3.7 10.3l-1.1 1.1M11.4 11.4l-1.1-1.1M3.7 3.7l-1.1-1.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>';
+const ICON_MOON = '<path d="M12.5 8.7A5.5 5.5 0 1 1 5.3 1.5a5 5 0 0 0 7.2 7.2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>';
+
 function syncThemeUI() {
-  btnSettings.style.color = resolveDark(currentTheme) ? 'var(--text-accent)' : '';
+  const dark = resolveDark(currentTheme);
+  btnSettings.style.color = dark ? 'var(--text-accent)' : '';
+  btnSettingsIcon.innerHTML = dark ? ICON_MOON : ICON_SUN;
   themeSeg.querySelectorAll('button').forEach(b =>
     b.classList.toggle('active', b.dataset.theme === currentTheme));
 }
