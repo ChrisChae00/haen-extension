@@ -34,3 +34,15 @@ key.pem
 
 # Claude Code
 .claude/
+
+# Benchmark harness
+bench/.venv/
+bench/.cache/            # FLORES tarball; regenerate with `npm run sample-flores`
+bench/datasets/*/flores.jsonl  # derived + seed-pinned, regenerate byte-identically
+#
+# Raw run output stays local and is NOT committed - predictions.jsonl for the full set
+# across every model is large and churns. Keep it on disk forever regardless: re-scoring
+# past runs with a new metric or a changed judge rubric needs the original outputs, and
+# regenerating them costs real money.
+# Commit only the summaries, by copying metrics.json + report.md into results-committed/.
+bench/results/

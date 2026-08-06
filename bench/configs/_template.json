@@ -1,0 +1,19 @@
+{
+  "name": "REPLACE-short-slug-used-in-the-run-id",
+  "harness": "haen",
+  "provider": "groq",
+  "modelId": "REPLACE-exact-model-id-never-an-evergreen-alias",
+  "apiKeyEnv": "GROQ_API_KEY",
+
+  "uiLanguage": "ko",
+  "temperature": 0,
+
+  "datasetVersion": "v1",
+  "datasets": ["flores.jsonl", "handbuilt.jsonl"],
+  "limit": null,
+
+  "runs": 3,
+  "concurrency": 4,
+
+  "judgeModelId": null
+}

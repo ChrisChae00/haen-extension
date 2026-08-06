@@ -1,0 +1,11 @@
+# chrF++ / BLEU. Small, pure Python, no model downloads.
+sacrebleu>=2.4.0
+
+# COMET (Unbabel/wmt22-comet-da) - the primary quality metric.
+# Apache-2.0 and ungated. Pulls PyTorch; first run downloads ~2.3GB of weights.
+#
+# NOT used: Unbabel/wmt22-cometkiwi-da. It is reference-free and would have let the
+# dataset grow without authoring references, but it is gated on HuggingFace and licensed
+# CC-BY-NC-SA. A non-commercial dependency is the wrong thing to build into the eval
+# pipeline of a publicly distributed extension, so that branch was dropped.
+unbabel-comet>=2.2.0
