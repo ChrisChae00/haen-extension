@@ -41,6 +41,13 @@ export function makeHaenProvider(config) {
         uiLanguage: config.uiLanguage ?? 'ko',
         direction: item.direction,
         temperature: config.temperature ?? 0,
+        // apiClient's own NO_JSON_MODE table is keyed on the extension's model keys
+        // (llama4, kimi, ...), not on an arbitrary benchmarked modelId, so it can't tell
+        // whether a model under test supports response_format. Default true (most
+        // OpenAI-compatible APIs do); configs for models that don't must set this false,
+        // or every response gets forced into JSON server-side and compliance measures
+        // the serving stack instead of the model's instruction-following.
+        jsonMode: config.jsonMode ?? true,
         onRaw,
         // No onChunk: streaming off. Non-streaming is the deterministic path and the
         // only one that returns a usage block.

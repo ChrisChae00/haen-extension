@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { TranslatorAPI } from '../../src/apiClient.js';
 import { loadDataset } from './dataset.js';
 
@@ -43,6 +44,14 @@ Respond with ONLY this JSON object, no prose and no code fences:
 
 const CRITERIA = ['naturalFluent', 'nuanceGrounded', 'altsDistinct', 'tipFactual'];
 const DEFAULT_SUBSET = 50;
+
+// Cache invalidation key. score.py's scoring must be deterministic (run it twice, get
+// identical numbers), which is why judge.jsonl is never re-requested for an id already
+// present - but that only holds if the rubric that produced the cached row is the same
+// rubric being scored against. Editing RUBRIC and re-running judge.js used to silently
+// keep serving verdicts from the old wording. Rows are tagged with this hash; a mismatch
+// means the row is stale, not a cache hit.
+const RUBRIC_HASH = createHash('sha256').update(RUBRIC).digest('hex');
 
 function parseArgs(argv) {
   const args = { runDir: null, limit: DEFAULT_SUBSET };
@@ -107,12 +116,18 @@ async function main() {
   const subset = records.sort((a, b) => (a.id < b.id ? -1 : 1)).slice(0, args.limit);
 
   const outFile = path.join(runDir, 'judge.jsonl');
-  const alreadyJudged = new Set(
-    existsSync(outFile)
-      ? readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l).id)
-      : []
-  );
-  if (!existsSync(outFile)) writeFileSync(outFile, '');
+  const existingRows = existsSync(outFile)
+    ? readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
+    : [];
+  const fresh = existingRows.filter(r => r.rubricHash === RUBRIC_HASH);
+  const stale = existingRows.length - fresh.length;
+  if (stale > 0) {
+    console.log(`  rubric changed since last run - dropping ${stale} stale cached verdict(s)`);
+    writeFileSync(outFile, fresh.map(r => JSON.stringify(r)).join('\n') + (fresh.length ? '\n' : ''));
+  } else if (!existsSync(outFile)) {
+    writeFileSync(outFile, '');
+  }
+  const alreadyJudged = new Set(fresh.map(r => r.id));
 
   const todo = subset.filter(r => !alreadyJudged.has(r.id));
   if (todo.length === 0) {
@@ -139,7 +154,7 @@ async function main() {
       }).catch(() => {});
       const { scores, note } = extractVerdict(raw);
       appendFileSync(outFile, JSON.stringify({
-        id: record.id, slice: record.slice, judgeModelId: config.judgeModelId, scores, note,
+        id: record.id, slice: record.slice, judgeModelId: config.judgeModelId, rubricHash: RUBRIC_HASH, scores, note,
       }) + '\n');
     } catch (e) {
       failures++;

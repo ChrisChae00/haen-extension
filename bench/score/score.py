@@ -42,6 +42,15 @@ COMPLIANCE_ORDER = [
     "altsExactlyTwo", "altsSizesValid", "altsRegistersValid",
     "hanjaLeak", "fenced", "prosePreamble", "salvaged", "retried", "empty",
 ]
+# Every value in compliance_rates() is "rate the model did the right thing" (see there),
+# but half the underlying keys are named after the failure they detect (hanjaLeak,
+# salvaged, ...). Printing "hanjaLeak | 100.0%" reads as "100% leaked Hanja" when it means
+# the opposite. Report headers use this positive-sense label instead of the raw key name;
+# metrics.json keeps the raw key so it still matches compliance.js one-to-one.
+COMPLIANCE_LABELS = {
+    "hanjaLeak": "noHanjaLeak", "fenced": "noFence", "prosePreamble": "noPreamble",
+    "salvaged": "notSalvaged", "retried": "notRetried", "empty": "nonEmpty",
+}
 
 
 def load_predictions(run_dir):
@@ -257,6 +266,11 @@ def write_report(m, path):
     for key in [k for k in var if k.endswith("_stdev")]:
         L.append(f"- {key.replace('_stdev', '')} stdev across runs: **{num(var[key], 3)}** → tie threshold ±{num(var[key] * 2, 3)}")
     L.append("")
+    L.append("> This tie threshold is measured on chrF++ only (cheap enough to run every pass;")
+    L.append("> COMET at 3x the inference cost is not). It does not transfer to COMET points 1:1 -")
+    L.append("> treat a COMET gap as meaningful only if it is also large relative to this chrF++")
+    L.append("> noise floor, not by comparing the raw numbers.")
+    L.append("")
 
     L.append("## Quality — COMET (primary)\n")
     if m["quality"].get("comet"):
@@ -286,9 +300,10 @@ def write_report(m, path):
     L.append("why slices appear here and nowhere else.\n")
     slices = m["compliance"]["bySlice"]
     cols = [k for k in COMPLIANCE_ORDER if k in m["compliance"]["overall"]]
-    L.append("| slice | n | " + " | ".join(cols) + " |")
+    headers = [COMPLIANCE_LABELS.get(k, k) for k in cols]
+    L.append("| slice | n | " + " | ".join(headers) + " |")
     L.append("|---|---|" + "---|" * len(cols))
-    L.append(f"| **overall** | {m['itemCount']} | " + " | ".join(pct(m["compliance"]["overall"].get(k)) for k in cols) + " |")
+    L.append(f"| **overall** | {m['compliance']['n']} | " + " | ".join(pct(m["compliance"]["overall"].get(k)) for k in cols) + " |")
     for name in sorted(slices):
         s = slices[name]
         L.append(f"| {name} | {s['n']} | " + " | ".join(pct(s["rates"].get(k)) for k in cols) + " |")
@@ -411,8 +426,14 @@ def main():
         s = segment(ok)
         quality_by_run["chrf2"].append(s["chrf2"] if s else None)
 
+    # Compliance measures whether the MODEL followed instructions. A record with a
+    # transport error (429, timeout, 5xx) has raw="" for infrastructure reasons, which
+    # would otherwise count as "empty": true / "jsonValid": false - an outage misread as
+    # the model failing to produce JSON. failureRate (in `operational`, over all attempts)
+    # is where infra failures belong; compliance is scoped to responses that arrived.
+    compliant_pool = [r for r in primary if not r.get("error")]
     by_slice = defaultdict(list)
-    for r in primary:
+    for r in compliant_pool:
         by_slice[r.get("slice", "unknown")].append(r)
 
     metrics = {
@@ -421,7 +442,8 @@ def main():
         "itemCount": len(primary),
         "quality": {"ngram": ngram, "comet": comet_out or None},
         "compliance": {
-            "overall": compliance_rates(primary),
+            "n": len(compliant_pool),
+            "overall": compliance_rates(compliant_pool),
             "bySlice": {k: {"n": len(v), "rates": compliance_rates(v)} for k, v in sorted(by_slice.items())},
         },
         "operational": operational(primary, config, pricing),

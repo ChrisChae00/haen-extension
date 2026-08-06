@@ -95,3 +95,8 @@ test('salvage and retry flags pass through', () => {
   assert.equal(c.salvaged, true);
   assert.equal(c.retried, true);
 });
+
+test('a salvaged parse is not counted as jsonValid even though parsed is non-null', () => {
+  const c = checkCompliance('{"natural": "truncated', goodParsed, KO_TO_EN, { salvaged: true });
+  assert.equal(c.jsonValid, false);
+});

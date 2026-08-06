@@ -58,7 +58,11 @@ export function checkCompliance(raw, parsed, item, { uiLanguage = 'ko', salvaged
 
   return {
     // --- output shape ---
-    jsonValid: parsed != null,
+    // Excludes salvage: parsePartial (apiClient.js:154) also returns a non-null object
+    // when the real JSON.parse failed, so "parsed != null" alone can't tell a clean
+    // parse from a rescued one. Keeping them apart is the whole point of tracking
+    // salvage separately - it is a distinct failure mode from parse failure or success.
+    jsonValid: parsed != null && !salvaged,
     empty: text.length === 0,
     // The prompt says "no markdown, no code fences". apiClient strips them anyway
     // (apiClient.js:99), so this never reaches the user - but it's a clean signal of

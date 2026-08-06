@@ -166,18 +166,22 @@ export function parsePartial(raw) {
 }
 
 export class TranslatorAPI {
-  // provider / modelId / temperature / onRaw are benchmark-facing escape hatches.
-  // The extension never passes them: provider falls back to key-prefix detection,
-  // modelId to the MODEL_IDS lookup, temperature to the shipping default. They exist
-  // so the harness can pin an exact model and a deterministic temperature, and capture
-  // the raw response body even when parsing fails (parse failures are a measured result,
-  // not just an error).
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, systemPromptOverride, onRaw, onChunk, signal } = {}) {
+  // provider / modelId / temperature / jsonMode / onRaw are benchmark-facing escape
+  // hatches. The extension never passes them: provider falls back to key-prefix
+  // detection, modelId to the MODEL_IDS lookup, temperature to the shipping default,
+  // jsonMode to the NO_JSON_MODE lookup (which only knows the extension's own model
+  // keys). They exist so the harness can pin an exact model and a deterministic
+  // temperature, tell the client whether an arbitrary benchmarked model supports
+  // response_format (NO_JSON_MODE can't, since it's keyed on modelKey, not modelId),
+  // and capture the raw response body even when parsing fails (parse failures are a
+  // measured result, not just an error).
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, systemPromptOverride, onRaw, onChunk, signal } = {}) {
     const provider = providerOverride ?? detectProvider(apiKey, modelKey);
     const model = modelId
       ?? MODEL_IDS[provider]?.[modelKey]
       ?? MODEL_IDS[provider]?.[PROVIDER_DEFAULT_MODEL_KEY[provider]];
-    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, systemPromptOverride, onRaw, onChunk, signal };
+    const useJsonMode = jsonMode ?? !NO_JSON_MODE.has(modelKey);
+    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, onRaw, onChunk, signal };
 
     try {
       return await this._translateWithRetry(text, params);
@@ -210,7 +214,7 @@ export class TranslatorAPI {
     throw lastError;
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, systemPromptOverride, onRaw, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, onRaw, onChunk, signal }) {
     const systemPrompt = systemPromptOverride ?? buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
 
@@ -241,7 +245,7 @@ export class TranslatorAPI {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: text },
           ],
-          ...(!NO_JSON_MODE.has(modelKey) && { response_format: { type: 'json_object' } }),
+          ...(useJsonMode && { response_format: { type: 'json_object' } }),
           stream: useStream,
           temperature,
           max_tokens: 2048,

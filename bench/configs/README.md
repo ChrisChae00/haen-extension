@@ -17,6 +17,7 @@ plus a pricing row.
 | `modelId` | **Exact** model id. Never an evergreen alias. |
 | `apiKeyEnv` | Env var holding the key. Omit or `null` for `ollama` — local models have no key. |
 | `temperature` | `0` for benchmark runs. Does not guarantee determinism; that is what `runs: 3` measures. |
+| `jsonMode` | `true` unless the model can't do OpenAI's `response_format: json_object` (check the provider's docs). Compliance's `jsonValid` is only a fact about the model's own instruction-following when this is set correctly - a server-enforced JSON mode measures the serving stack, not the model. |
 | `limit` | `null` for the full set. Used for the ceiling-anchor model, which only runs a subset to keep cost down. Takes the first N in stable id order, so it is the same subset every time. |
 | `runs` | `3`. Feeds `runVariance` in `score.py`. |
 | `judgeModelId` | Only on the config used for LLM-as-judge scoring. Must not be a model under test. |

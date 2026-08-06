@@ -37,8 +37,10 @@ key.pem
 
 # Benchmark harness
 bench/.venv/
-bench/.cache/            # FLORES tarball; regenerate with `npm run sample-flores`
-bench/datasets/*/flores.jsonl  # derived + seed-pinned, regenerate byte-identically
+# FLORES tarball cache; regenerate with `npm run sample-flores`
+bench/.cache/
+# derived + seed-pinned; regenerate byte-identically with `npm run sample-flores`
+bench/datasets/*/flores.jsonl
 #
 # Raw run output stays local and is NOT committed - predictions.jsonl for the full set
 # across every model is large and churns. Keep it on disk forever regardless: re-scoring

@@ -7,6 +7,7 @@
 
   "uiLanguage": "ko",
   "temperature": 0,
+  "jsonMode": true,
 
   "datasetVersion": "v1",
   "datasets": ["flores.jsonl", "handbuilt.jsonl"],

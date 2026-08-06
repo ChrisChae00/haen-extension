@@ -107,9 +107,8 @@ async function main() {
   const config = JSON.parse(readFileSync(args.config, 'utf8'));
   const runs = args.runs ?? config.runs ?? 3;
 
-  const { items: allItems, checksums } = loadDataset(config);
   const limit = args.limit ?? config.limit ?? null;
-  const items = limit ? allItems.slice(0, limit) : allItems;
+  const { items, checksums } = loadDataset({ ...config, limit });
 
   if (args.dryRun) return dryRun(config, items, runs);
 
