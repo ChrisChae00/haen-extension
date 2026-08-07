@@ -1,0 +1,22 @@
+{
+  "version": "v1",
+  "status": "seed",
+  "note": "handbuilt.jsonl currently holds the 12-item pipeline seed. Step 3 expands it to 200 (50 per slice). Checksums below are recorded per run in results/<run-id>/config.json, which is the copy that matters for comparability.",
+  "files": {
+    "flores.jsonl": {
+      "generator": "src/sampleFlores.js",
+      "seed": 20260805,
+      "split": "devtest",
+      "perDirection": 100,
+      "license": "CC-BY-SA-4.0",
+      "committed": false,
+      "note": "Not committed. Regenerate with `npm run sample-flores`; the seed makes it byte-identical."
+    },
+    "handbuilt.jsonl": {
+      "slices": ["news", "technical", "casual", "ui"],
+      "targetPerSlice": 50,
+      "currentCount": 12,
+      "authoring": "LLM-drafted, human-reviewed. Drafting model must never be one under test."
+    }
+  }
+}

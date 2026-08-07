@@ -1,0 +1,13 @@
+{
+  "name": "haen-bench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Translation benchmarking harness for the Haen extension. No dependencies - Node 24 built-ins only.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test src/*.test.js",
+    "sample-flores": "node src/sampleFlores.js",
+    "run": "node src/run.js"
+  }
+}

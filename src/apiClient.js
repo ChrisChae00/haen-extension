@@ -7,6 +7,11 @@ const ENDPOINTS = {
   // a free-tier Google AI Studio key ("AIza...") instead of routing through
   // OpenRouter (which only offers Gemini as a paid or rate-limited model).
   google:     'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+  // Local models via Ollama's OpenAI-compatible endpoint. Never reached by the
+  // extension (detectProvider never returns 'ollama'); it exists so the benchmark
+  // harness can drive local models through this exact code path — same retry,
+  // error mapping, and parsing as the hosted providers.
+  ollama:     'http://localhost:11434/v1/chat/completions',
 };
 
 const MODEL_IDS = {
@@ -161,10 +166,22 @@ export function parsePartial(raw) {
 }
 
 export class TranslatorAPI {
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, onChunk, signal } = {}) {
-    const provider = detectProvider(apiKey, modelKey);
-    const model = MODEL_IDS[provider]?.[modelKey] ?? MODEL_IDS[provider]?.[PROVIDER_DEFAULT_MODEL_KEY[provider]];
-    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, onChunk, signal };
+  // provider / modelId / temperature / jsonMode / onRaw are benchmark-facing escape
+  // hatches. The extension never passes them: provider falls back to key-prefix
+  // detection, modelId to the MODEL_IDS lookup, temperature to the shipping default,
+  // jsonMode to the NO_JSON_MODE lookup (which only knows the extension's own model
+  // keys). They exist so the harness can pin an exact model and a deterministic
+  // temperature, tell the client whether an arbitrary benchmarked model supports
+  // response_format (NO_JSON_MODE can't, since it's keyed on modelKey, not modelId),
+  // and capture the raw response body even when parsing fails (parse failures are a
+  // measured result, not just an error).
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, systemPromptOverride, onRaw, onChunk, signal } = {}) {
+    const provider = providerOverride ?? detectProvider(apiKey, modelKey);
+    const model = modelId
+      ?? MODEL_IDS[provider]?.[modelKey]
+      ?? MODEL_IDS[provider]?.[PROVIDER_DEFAULT_MODEL_KEY[provider]];
+    const useJsonMode = jsonMode ?? !NO_JSON_MODE.has(modelKey);
+    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, onRaw, onChunk, signal };
 
     try {
       return await this._translateWithRetry(text, params);
@@ -197,8 +214,8 @@ export class TranslatorAPI {
     throw lastError;
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, onChunk, signal }) {
-    const systemPrompt = buildSystemPrompt(uiLanguage, direction);
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, onRaw, onChunk, signal }) {
+    const systemPrompt = systemPromptOverride ?? buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
 
     const timeoutController = new AbortController();
@@ -208,10 +225,9 @@ export class TranslatorAPI {
       ? AbortSignal.any([signal, timeoutController.signal])
       : timeoutController.signal;
 
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    };
+    const headers = { 'Content-Type': 'application/json' };
+    // Local providers have no key — sending "Bearer undefined" is worse than sending nothing.
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
     if (provider === 'openrouter') {
       headers['HTTP-Referer'] = 'https://github.com/ChrisChae00/haen-extension';
       headers['X-Title'] = 'Haen Translator';
@@ -229,9 +245,9 @@ export class TranslatorAPI {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: text },
           ],
-          ...(!NO_JSON_MODE.has(modelKey) && { response_format: { type: 'json_object' } }),
+          ...(useJsonMode && { response_format: { type: 'json_object' } }),
           stream: useStream,
-          temperature: 0.3,
+          temperature,
           max_tokens: 2048,
         }),
       });
@@ -255,7 +271,7 @@ export class TranslatorAPI {
     if (!response.ok) throw new NetworkError(`HTTP ${response.status}`, response.status);
 
     if (useStream) {
-      return this._handleStream(response, onChunk, combined);
+      return this._handleStream(response, onChunk, onRaw, combined);
     }
 
     let json;
@@ -266,11 +282,12 @@ export class TranslatorAPI {
     }
 
     const raw = json.choices?.[0]?.message?.content;
+    onRaw?.(raw ?? '', json.usage);
     if (!raw) throw new InvalidResponseError('Empty content in response');
     return extractResultFromJson(raw);
   }
 
-  async _handleStream(response, onChunk, signal) {
+  async _handleStream(response, onChunk, onRaw, signal) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let lineBuffer = '';
@@ -303,6 +320,7 @@ export class TranslatorAPI {
       reader.releaseLock();
     }
 
+    onRaw?.(contentAccumulated);
     if (!contentAccumulated) throw new InvalidResponseError('Empty stream response');
     return extractResultFromJson(contentAccumulated);
   }

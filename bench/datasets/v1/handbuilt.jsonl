@@ -1,0 +1,12 @@
+{"id":"hb-casual-001","direction":"ko_to_en","slice":"casual","source":"밥은 먹고 다니냐?","references":["Have you been eating okay?","You taking care of yourself?","You been eating alright?"]}
+{"id":"hb-casual-002","direction":"ko_to_en","slice":"casual","source":"아 진짜 그건 좀 선 넘었다.","references":["Okay, that was actually out of line.","Nah, that crossed a line.","That was over the line, honestly."]}
+{"id":"hb-casual-003","direction":"en_to_ko","slice":"casual","source":"No worries, I'll cover you this time.","references":["괜찮아, 이번엔 내가 낼게.","걱정 마, 이번은 내가 살게."]}
+{"id":"hb-news-001","direction":"ko_to_en","slice":"news","source":"정부는 이번 조치가 물가 안정에 기여할 것으로 내다봤다.","references":["The government projected that the measure would help stabilize prices.","The government expected the step to contribute to price stability."]}
+{"id":"hb-news-002","direction":"ko_to_en","slice":"news","source":"양측은 이견을 좁히지 못한 채 협상을 마무리했다.","references":["The two sides concluded the talks without narrowing their differences.","The negotiations ended with both parties still far apart."]}
+{"id":"hb-news-003","direction":"en_to_ko","slice":"news","source":"The central bank held interest rates steady, citing persistent uncertainty in global markets.","references":["중앙은행은 세계 시장의 불확실성이 지속되고 있다는 점을 들어 금리를 동결했다.","중앙은행은 글로벌 시장의 불확실성이 계속되고 있다며 기준금리를 유지했다."]}
+{"id":"hb-technical-001","direction":"ko_to_en","slice":"technical","source":"이 함수는 호출될 때마다 캐시를 무효화하므로 성능에 유의해야 한다.","references":["This function invalidates the cache on every call, so be mindful of performance.","Because this function invalidates the cache each time it is called, watch out for performance."]}
+{"id":"hb-technical-002","direction":"en_to_ko","slice":"technical","source":"Deprecated: use `fetchAll()` instead. This method will be removed in the next major release.","references":["지원 중단됨: 대신 `fetchAll()`을 사용하세요. 이 메서드는 다음 메이저 릴리스에서 제거됩니다.","사용 중단: `fetchAll()`로 대체되었습니다. 다음 메이저 버전에서 삭제될 예정입니다."]}
+{"id":"hb-technical-003","direction":"en_to_ko","slice":"technical","source":"The request timed out after 30 seconds. Check your network connection and try again.","references":["30초 후 요청 시간이 초과되었습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.","요청이 30초 만에 시간 초과되었습니다. 네트워크 상태를 확인하고 재시도해 주세요."]}
+{"id":"hb-ui-001","direction":"en_to_ko","slice":"ui","source":"Save changes","references":["변경사항 저장","변경 내용 저장"]}
+{"id":"hb-ui-002","direction":"en_to_ko","slice":"ui","source":"Sign out","references":["로그아웃"]}
+{"id":"hb-ui-003","direction":"ko_to_en","slice":"ui","source":"불러오는 중...","references":["Loading...","Loading"]}
