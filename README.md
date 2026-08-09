@@ -26,6 +26,7 @@ Built with a focus on performance, reliability, and user experience, Haen showca
 - **Modern Chrome Extension APIs (MV3)**: Fully integrated into the Chrome Side Panel for a persistent user workflow, strictly adhering to Manifest V3 Content Security Policy (CSP) with a modular architecture.
 - **Robust Design System & A11y**: Built a custom token-based theme engine enforcing accessibility contrast standards, with seamless 3-way theme control (Light/Dark/System) and smooth transitions.
 - **Multi-Provider LLM Support**: Dynamically handles APIs from Groq, OpenRouter, and Google (Gemini), automatically adjusting payload parameters based on provider requirements.
+- **Fast Compliance Test Suite**: Built a zero-dependency compliance test suite (`node --test`) enforcing 15 schema and Hanja rules, **verified in under 3 seconds per run (42.66ms)**.
 
 ---
 
