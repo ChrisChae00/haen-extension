@@ -1,0 +1,22 @@
+{
+  "name": "gemini-3.5-flash-lite",
+  "harness": "haen",
+  "provider": "google",
+  "modelId": "gemini-3.5-flash-lite",
+  "apiKeyEnv": "GEMINI_API_KEY",
+
+  "uiLanguage": "ko",
+  "temperature": 0,
+  "jsonMode": true,
+  "stream": true,
+
+  "datasetVersion": "v1",
+  "datasets": ["flores.jsonl", "handbuilt.jsonl"],
+  "limit": null,
+
+  "runs": 3,
+  "concurrency": 1,
+  "minIntervalMs": 4200,
+
+  "judgeModelId": null
+}

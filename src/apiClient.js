@@ -166,7 +166,11 @@ export function parsePartial(raw) {
 }
 
 export class TranslatorAPI {
-  // provider / modelId / temperature / jsonMode / onRaw are benchmark-facing escape
+  constructor() {
+    this._cache = new Map();
+  }
+
+  // provider / modelId / temperature / jsonMode / onRaw / enableCache are benchmark-facing escape
   // hatches. The extension never passes them: provider falls back to key-prefix
   // detection, modelId to the MODEL_IDS lookup, temperature to the shipping default,
   // jsonMode to the NO_JSON_MODE lookup (which only knows the extension's own model
@@ -175,13 +179,21 @@ export class TranslatorAPI {
   // response_format (NO_JSON_MODE can't, since it's keyed on modelKey, not modelId),
   // and capture the raw response body even when parsing fails (parse failures are a
   // measured result, not just an error).
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, systemPromptOverride, onRaw, onChunk, signal } = {}) {
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, systemPromptOverride, enableCache = false, onRaw, onChunk, signal } = {}) {
     const provider = providerOverride ?? detectProvider(apiKey, modelKey);
     const model = modelId
       ?? MODEL_IDS[provider]?.[modelKey]
       ?? MODEL_IDS[provider]?.[PROVIDER_DEFAULT_MODEL_KEY[provider]];
     const useJsonMode = jsonMode ?? !NO_JSON_MODE.has(modelKey);
-    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, onRaw, onChunk, signal };
+
+    const cacheKey = `${provider}:${model}:${uiLanguage}:${direction}:${text.trim()}`;
+    if (enableCache && this._cache.has(cacheKey)) {
+      const cachedItem = this._cache.get(cacheKey);
+      onRaw?.(cachedItem.raw, cachedItem.usage, { ttfbMs: 0, cached: true });
+      return cachedItem.parsed;
+    }
+
+    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal };
 
     try {
       return await this._translateWithRetry(text, params);
@@ -214,9 +226,10 @@ export class TranslatorAPI {
     throw lastError;
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, onRaw, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal }) {
     const systemPrompt = systemPromptOverride ?? buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
+    const startedAt = performance.now();
 
     const timeoutController = new AbortController();
     const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
@@ -247,6 +260,9 @@ export class TranslatorAPI {
           ],
           ...(useJsonMode && { response_format: { type: 'json_object' } }),
           stream: useStream,
+          // OpenAI-compatible streaming omits `usage` unless asked; without it every
+          // streamed call would report zero tokens and a $0 cost.
+          ...(useStream && { stream_options: { include_usage: true } }),
           temperature,
           max_tokens: 2048,
         }),
@@ -271,7 +287,7 @@ export class TranslatorAPI {
     if (!response.ok) throw new NetworkError(`HTTP ${response.status}`, response.status);
 
     if (useStream) {
-      return this._handleStream(response, onChunk, onRaw, combined);
+      return this._handleStream(response, onChunk, onRaw, combined, startedAt, cacheKey, enableCache);
     }
 
     let json;
@@ -282,16 +298,26 @@ export class TranslatorAPI {
     }
 
     const raw = json.choices?.[0]?.message?.content;
-    onRaw?.(raw ?? '', json.usage);
+    // TTFB is a streaming-only concept: without a stream, "first byte" and "full body"
+    // arrive in the same event, so this field would just restate latencyMs under a
+    // misleading name. Leave it null here; only _handleStream measures a real TTFB.
+    const meta = { ttfbMs: null, cached: false };
+    onRaw?.(raw ?? '', json.usage, meta);
     if (!raw) throw new InvalidResponseError('Empty content in response');
-    return extractResultFromJson(raw);
+    const parsed = extractResultFromJson(raw);
+    if (enableCache && cacheKey && parsed) {
+      this._cache.set(cacheKey, { raw, usage: json.usage, parsed });
+    }
+    return parsed;
   }
 
-  async _handleStream(response, onChunk, onRaw, signal) {
+  async _handleStream(response, onChunk, onRaw, signal, startedAt = performance.now(), cacheKey = null, enableCache = false) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let lineBuffer = '';
     let contentAccumulated = '';
+    let ttfbMs = null;
+    let usage = null;
 
     try {
       while (true) {
@@ -309,8 +335,14 @@ export class TranslatorAPI {
 
         for (const line of completeLines) {
           const chunk = parseSSELine(line.trim());
+          // With stream_options.include_usage, the final chunk carries usage and an
+          // empty choices array instead of a delta.
+          if (chunk?.usage) usage = chunk.usage;
           const delta = chunk?.choices?.[0]?.delta?.content;
           if (delta) {
+            if (ttfbMs === null) {
+              ttfbMs = Math.round(performance.now() - startedAt);
+            }
             contentAccumulated += delta;
             onChunk(contentAccumulated);
           }
@@ -320,8 +352,13 @@ export class TranslatorAPI {
       reader.releaseLock();
     }
 
-    onRaw?.(contentAccumulated);
+    const meta = { ttfbMs: ttfbMs ?? Math.round(performance.now() - startedAt), cached: false };
+    onRaw?.(contentAccumulated, usage, meta);
     if (!contentAccumulated) throw new InvalidResponseError('Empty stream response');
-    return extractResultFromJson(contentAccumulated);
+    const parsed = extractResultFromJson(contentAccumulated);
+    if (enableCache && cacheKey && parsed) {
+      this._cache.set(cacheKey, { raw: contentAccumulated, usage, parsed });
+    }
+    return parsed;
   }
 }

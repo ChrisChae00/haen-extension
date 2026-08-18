@@ -1,0 +1,20 @@
+{
+  "name": "qwen3-14b-local",
+  "harness": "haen",
+  "provider": "ollama",
+  "modelId": "qwen3:14b",
+  "apiKeyEnv": null,
+  "uiLanguage": "ko",
+  "temperature": 0,
+  "jsonMode": true,
+  "stream": true,
+  "datasetVersion": "v1",
+  "datasets": [
+    "flores.jsonl",
+    "handbuilt.jsonl"
+  ],
+  "limit": null,
+  "runs": 3,
+  "concurrency": 1,
+  "judgeModelId": null
+}
