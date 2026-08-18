@@ -92,6 +92,10 @@ export function makeHaenProvider(config) {
           // or every response gets forced into JSON server-side and compliance measures
           // the serving stack instead of the model's instruction-following.
           jsonMode: config.jsonMode ?? true,
+          // Groq bills TPD/TPM against the requested max_tokens, not actual usage, so a
+          // 2048 default reserves ~6x what a Haen response really costs. Configs lower it
+          // to stretch the free-tier budget; unset keeps apiClient's shipping default.
+          ...(config.maxTokens ? { maxTokens: config.maxTokens } : {}),
           onRaw,
           // If config.stream is true, pass a dummy onChunk to measure streaming TTFB
           ...(config.stream ? { onChunk: () => {} } : {}),

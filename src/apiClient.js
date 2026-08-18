@@ -170,7 +170,7 @@ export class TranslatorAPI {
     this._cache = new Map();
   }
 
-  // provider / modelId / temperature / jsonMode / onRaw / enableCache are benchmark-facing escape
+  // provider / modelId / temperature / jsonMode / maxTokens / onRaw / enableCache are benchmark-facing escape
   // hatches. The extension never passes them: provider falls back to key-prefix
   // detection, modelId to the MODEL_IDS lookup, temperature to the shipping default,
   // jsonMode to the NO_JSON_MODE lookup (which only knows the extension's own model
@@ -178,8 +178,10 @@ export class TranslatorAPI {
   // temperature, tell the client whether an arbitrary benchmarked model supports
   // response_format (NO_JSON_MODE can't, since it's keyed on modelKey, not modelId),
   // and capture the raw response body even when parsing fails (parse failures are a
-  // measured result, not just an error).
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, systemPromptOverride, enableCache = false, onRaw, onChunk, signal } = {}) {
+  // measured result, not just an error). maxTokens exists because some providers (Groq)
+  // bill their free-tier token budget against the requested ceiling rather than actual
+  // usage, so the harness needs to lower it without changing what the extension sends.
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, maxTokens = 2048, systemPromptOverride, enableCache = false, onRaw, onChunk, signal } = {}) {
     const provider = providerOverride ?? detectProvider(apiKey, modelKey);
     const model = modelId
       ?? MODEL_IDS[provider]?.[modelKey]
@@ -193,7 +195,7 @@ export class TranslatorAPI {
       return cachedItem.parsed;
     }
 
-    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal };
+    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal };
 
     try {
       return await this._translateWithRetry(text, params);
@@ -226,7 +228,7 @@ export class TranslatorAPI {
     throw lastError;
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens = 2048, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal }) {
     const systemPrompt = systemPromptOverride ?? buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
     const startedAt = performance.now();
@@ -264,7 +266,7 @@ export class TranslatorAPI {
           // streamed call would report zero tokens and a $0 cost.
           ...(useStream && { stream_options: { include_usage: true } }),
           temperature,
-          max_tokens: 2048,
+          max_tokens: maxTokens,
         }),
       });
     } catch (e) {
