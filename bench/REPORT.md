@@ -28,3 +28,16 @@ Benchmarked **4 model(s)**: gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qw
 > column above), treat them as tied - that's the noise floor from re-running the same
 > config, not a real quality gap.
 
+## Structured-output quality (LLM-as-judge)
+
+| Model | n | naturalFluent | nuanceGrounded | altsDistinct | tipFactual |
+|---|---|---|---|---|---|
+| qwen3-14b-local | 12 | 91.7% | 50.0% | 58.3% | 91.7% |
+| gemini-3.5-flash-lite | 12 | 100.0% | 100.0% | 41.7% | 91.7% |
+| gpt-oss-120b | 12 | 91.7% | 58.3% | 58.3% | 100.0% |
+| gpt-oss-20b | 12 | 91.7% | 58.3% | 33.3% | 91.7% |
+
+> Judge: `anthropic/claude-sonnet-5`, binary rubric, same subset for every model.
+> Judge scores carry the judge's own biases and are for relative comparison
+> between the models in this table only.
+

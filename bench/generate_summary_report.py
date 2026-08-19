@@ -119,6 +119,34 @@ def main():
     lines.append("> column above), treat them as tied - that's the noise floor from re-running the same")
     lines.append("> config, not a real quality gap.\n")
 
+    # LLM-as-judge. The four structured fields have no reference translation, so nothing
+    # else in this file can see them: COMET scores `natural` alone and compliance only asks
+    # whether `nuance` exists, not whether it says anything. A model can hold 100% on every
+    # rule here and still emit filler - which is what this table is for.
+    judged = [r for r in runs if r.get("judge")]
+    if judged:
+        criteria = ["naturalFluent", "nuanceGrounded", "altsDistinct", "tipFactual"]
+        judge_ids = {r["judge"].get("judgeModelId") for r in judged}
+        lines.append("## Structured-output quality (LLM-as-judge)\n")
+        lines.append("| Model | n | " + " | ".join(criteria) + " |")
+        lines.append("|---|---|" + "---|" * len(criteria))
+        for r in judged:
+            j = r["judge"]
+            name = r.get("config", {}).get("name", "Unknown")
+            cells = " | ".join(pct(j["rates"].get(k)) for k in criteria)
+            lines.append(f"| {name} | {j.get('n', '—')} | {cells} |")
+        lines.append("")
+        # Scores from different judges are different measurements wearing the same column
+        # header, so say it out loud rather than letting the table imply one scale.
+        if len(judge_ids) > 1:
+            lines.append("> **These rows were not judged by the same model** (" +
+                         ", ".join(f"`{i}`" for i in sorted(judge_ids)) +
+                         "). The numbers are not comparable to each other until they are.\n")
+        else:
+            lines.append(f"> Judge: `{judge_ids.pop()}`, binary rubric, same subset for every model.")
+            lines.append("> Judge scores carry the judge's own biases and are for relative comparison")
+            lines.append("> between the models in this table only.\n")
+
     content = "\n".join(lines) + "\n"
     report_file = bench_root / "REPORT.md"
     report_file.write_text(content, encoding="utf-8")
