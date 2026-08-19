@@ -96,6 +96,9 @@ export function makeHaenProvider(config) {
           // 2048 default reserves ~6x what a Haen response really costs. Configs lower it
           // to stretch the free-tier budget; unset keeps apiClient's shipping default.
           ...(config.maxTokens ? { maxTokens: config.maxTokens } : {}),
+          // OpenRouter only. Pins which backend serves the model so latency/TTFB measure
+          // one serving stack; unpinned, the cheapest route wins and it is often 10x slower.
+          ...(config.providerRouting ? { providerRouting: config.providerRouting } : {}),
           onRaw,
           // If config.stream is true, pass a dummy onChunk to measure streaming TTFB
           ...(config.stream ? { onChunk: () => {} } : {}),
@@ -110,6 +113,13 @@ export function makeHaenProvider(config) {
           }
           throw new AllKeysExhausted(apiKeys.length, e);
         }
+        // A dead key is not a per-item failure either. When the key hits a spend cap
+        // (OpenRouter returns 401 "Key limit exceeded", which apiClient maps to
+        // InvalidKeyError) every remaining item fails in milliseconds and gets written to
+        // predictions.jsonl - and because resume skips any (runIndex, id) already on disk,
+        // those rows poison the run permanently. Observed: 384 of 424 items burned in
+        // seconds. Stop like an exhausted quota does and keep what actually measured.
+        if (e.name === 'InvalidKeyError') throw new AllKeysExhausted(apiKeys.length, e);
         error = { name: e.name, message: e.message, status: e.status ?? null };
         break;
       }

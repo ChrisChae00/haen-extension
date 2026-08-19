@@ -1,16 +1,13 @@
 {
   "name": "qwen3.6-27b",
   "harness": "haen",
-  "provider": "groq",
+  "provider": "openrouter",
   "modelId": "qwen/qwen3.6-27b",
-  "apiKeyEnv": [
-    "GROQ_API_KEY",
-    "GROQ_API_KEY_2"
-  ],
+  "apiKeyEnv": "OPENROUTER_API_KEY",
   "uiLanguage": "ko",
   "temperature": 0,
   "jsonMode": false,
-  "maxTokens": 768,
+  "maxTokens": 8192,
   "stream": true,
   "datasetVersion": "v1",
   "datasets": [
@@ -20,5 +17,11 @@
   "limit": null,
   "runs": 3,
   "concurrency": 1,
-  "judgeModelId": null
+  "judgeModelId": null,
+  "providerRouting": {
+    "order": [
+      "Alibaba"
+    ],
+    "allow_fallbacks": false
+  }
 }

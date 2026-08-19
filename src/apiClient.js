@@ -97,16 +97,42 @@ function parseSSELine(line) {
   try { return JSON.parse(line.slice(6)); } catch { return null; }
 }
 
+// Reasoning models (qwen3, gpt-oss) emit a <think> block before the answer. Its prose
+// contains braces and even a sketch of the schema being planned, so the greedy {...}
+// extraction below would splice reasoning into the JSON — and when the answer itself was
+// cut off by max_tokens, parsePartial happily salvaged `"natural": "..."` out of the
+// model's own scratchpad and returned it as a translation. Strip the block first. An
+// unclosed <think> means the answer never arrived; there is nothing to salvage.
+export function stripThinking(raw) {
+  return raw.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<think>[\s\S]*$/, '');
+}
+
+// Exported for the benchmark's parser tests; the extension never calls it directly.
+export const parseForTest = raw => extractResultFromJson(raw);
+
 function extractResultFromJson(raw) {
-  let text = raw.trim();
+  let text = stripThinking(raw).trim();
 
   // Strip markdown code fences some models add (```json ... ``` or ``` ... ```)
   const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)```$/);
   if (fenceMatch) text = fenceMatch[1].trim();
 
-  // Extract first JSON object if model adds prose before/after
-  const objMatch = text.match(/\{[\s\S]*\}/);
-  if (objMatch) text = objMatch[0];
+  // Extract the JSON object if the model adds prose before/after. Not the greedy
+  // first-brace-to-last-brace slice this used to be: some backends stream reasoning as
+  // plain prose with no <think> tags at all (Alibaba's qwen3.6 opens with "Here's a
+  // thinking process:" and sketches the schema, braces and all), so the first `{` is
+  // inside the scratchpad and the slice is unparseable. Every candidate start is tried in
+  // order and the first one that parses into a real result wins, which skips the prose.
+  const lastBrace = text.lastIndexOf('}');
+  if (lastBrace !== -1) {
+    for (let i = text.indexOf('{'); i !== -1 && i < lastBrace; i = text.indexOf('{', i + 1)) {
+      const candidate = text.slice(i, lastBrace + 1);
+      try {
+        const obj = JSON.parse(candidate);
+        if (typeof obj?.natural === 'string') { text = candidate; break; }
+      } catch { /* prose brace, or a nested object - try the next one */ }
+    }
+  }
 
   console.log('[Haen] raw response:', text.slice(0, 300));
 
@@ -141,8 +167,12 @@ function extractResultFromJson(raw) {
 // is a nested array and isn't safe to partially parse, so it's rendered only
 // once the full response has arrived.
 function extractPartialField(text, field) {
-  const re = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
-  const match = text.match(re);
+  // Global + last match: a reasoning model that plans its answer in prose writes the
+  // field name once in the sketch ("natural": "...") before writing it for real. The
+  // first match is the plan; the last one is the answer.
+  const re = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 'g');
+  const matches = [...text.matchAll(re)];
+  const match = matches.at(-1);
   if (!match) return undefined;
   try {
     return JSON.parse(`"${match[1]}"`);
@@ -153,7 +183,7 @@ function extractPartialField(text, field) {
 
 export function parsePartial(raw) {
   if (!raw) return {};
-  let text = raw.trim();
+  let text = stripThinking(raw).trim();
   const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*)/);
   if (fenceMatch) text = fenceMatch[1];
 
@@ -181,7 +211,7 @@ export class TranslatorAPI {
   // measured result, not just an error). maxTokens exists because some providers (Groq)
   // bill their free-tier token budget against the requested ceiling rather than actual
   // usage, so the harness needs to lower it without changing what the extension sends.
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, maxTokens = 2048, systemPromptOverride, enableCache = false, onRaw, onChunk, signal } = {}) {
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, maxTokens = 2048, providerRouting, systemPromptOverride, enableCache = false, onRaw, onChunk, signal } = {}) {
     const provider = providerOverride ?? detectProvider(apiKey, modelKey);
     const model = modelId
       ?? MODEL_IDS[provider]?.[modelKey]
@@ -195,7 +225,7 @@ export class TranslatorAPI {
       return cachedItem.parsed;
     }
 
-    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal };
+    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens, providerRouting, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal };
 
     try {
       return await this._translateWithRetry(text, params);
@@ -228,7 +258,7 @@ export class TranslatorAPI {
     throw lastError;
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens = 2048, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens = 2048, providerRouting, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal }) {
     const systemPrompt = systemPromptOverride ?? buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
     const startedAt = performance.now();
@@ -261,6 +291,12 @@ export class TranslatorAPI {
             { role: 'user', content: text },
           ],
           ...(useJsonMode && { response_format: { type: 'json_object' } }),
+          // Benchmark-only. OpenRouter routes to the cheapest provider by default, and
+          // "cheapest" is routinely the slowest: gpt-oss-120b came back at 34s/21s TTFB
+          // there versus a few seconds on Groq. That number would land in the report's
+          // latency column as if it were a property of the model. Pinning the backend
+          // makes the serving stack a recorded constant instead of a hidden variable.
+          ...(provider === 'openrouter' && providerRouting ? { provider: providerRouting } : {}),
           stream: useStream,
           // OpenAI-compatible streaming omits `usage` unless asked; without it every
           // streamed call would report zero tokens and a $0 cost.
