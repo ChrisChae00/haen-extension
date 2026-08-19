@@ -10,6 +10,7 @@
   "uiLanguage": "ko",
   "temperature": 0,
   "jsonMode": true,
+  "maxTokens": 768,
   "stream": true,
   "datasetVersion": "v1",
   "datasets": [
