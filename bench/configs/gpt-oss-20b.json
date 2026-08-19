@@ -17,7 +17,7 @@
   "runs": 3,
   "concurrency": 1,
   "judgeModelId": null,
-  "maxTokens": 1536,
+  "maxTokens": 2048,
   "providerRouting": {
     "order": [
       "Groq"

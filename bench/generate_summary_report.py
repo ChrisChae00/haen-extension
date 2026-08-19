@@ -19,6 +19,11 @@ def pct(x):
     return "—" if x is None else f"{x * 100:.1f}%"
 
 
+RULE_LABELS = {
+    "hanjaLeak": "noHanjaLeak", "fenced": "noFence", "prosePreamble": "noPreamble",
+    "salvaged": "notSalvaged", "retried": "notRetried", "empty": "nonEmpty",
+}
+
 def main():
     bench_root = Path(__file__).resolve().parent
     results_dir = bench_root / "results"
@@ -46,7 +51,7 @@ def main():
     lines.append(f"Benchmarked **{len(runs)} model(s)**: {names}.\n")
 
     lines.append("## Model Benchmark Comparison Matrix\n")
-    lines.append("| Model | Provider | n (items × runs) | Compliance | COMET (95% CI) | chrF++ | Latency (p50/p90/p99) | Streaming TTFB (p50) | Cost / 1k | Prices as of |")
+    lines.append("| Model | Provider | n (items × runs) | Compliance (worst rule) | COMET (95% CI) | chrF++ | Latency (p50/p90/p99) | Streaming TTFB (p50) | Cost / 1k | Prices as of |")
     lines.append("|---|---|---|---|---|---|---|---|---|---|")
 
     for r in runs:
@@ -60,7 +65,15 @@ def main():
         provider = c.get("provider", "Unknown")
         n = f"{r.get('itemCount', '—')} × {var.get('runs', '—')}"
 
-        comp_rate = pct(comp.get("overall", {}).get("hasAllRequired"))
+        # The weakest rule, not hasAllRequired. This column used to read hasAllRequired
+        # alone, which is one of the fifteen checks and the easiest to pass - gpt-oss-20b
+        # scored 100% on it while emitting invalid JSON on 2.4% of items and the wrong
+        # number of alternatives on 3.8%. A single "Compliance" number has to be the floor
+        # across the suite or it advertises a pass the run did not earn. Per-rule detail
+        # stays in each run's own report.md.
+        rules = comp.get("overall", {})
+        worst = min(rules.items(), key=lambda kv: kv[1]) if rules else None
+        comp_rate = f"{pct(worst[1])} ({RULE_LABELS.get(worst[0], worst[0])})" if worst else "—"
 
         comet = (quality.get("comet") or {}).get("overall")
         comet_str = f"{num(comet['system'])} ({comet['ci'][0]:.3f}–{comet['ci'][1]:.3f})" if comet and comet.get("ci") else (num(comet["system"]) if comet else "—")
