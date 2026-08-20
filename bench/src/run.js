@@ -77,8 +77,9 @@ export async function mapPool(items, concurrency, fn, minIntervalMs = 0) {
   }
   const results = new Array(items.length);
   let next = 0;
-  // Set by a worker whose fn threw AllKeysExhausted. The others finish their current item
-  // and stop rather than each burning a full retry cycle against a dead quota.
+  // Set by a worker whose fn threw a fatal error (dead quota, dead key, dead network).
+  // The others finish their current item and stop rather than each burning a full retry
+  // cycle - and, worse, writing a failure row per remaining item that resume would skip.
   let stop = null;
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (true) {
@@ -88,7 +89,7 @@ export async function mapPool(items, concurrency, fn, minIntervalMs = 0) {
       try {
         results[i] = await fn(items[i], i);
       } catch (e) {
-        if (e.name !== 'AllKeysExhausted') throw e;
+        if (!e.fatal) throw e;
         stop = e;
         return;
       }
@@ -213,7 +214,7 @@ async function main() {
     if (stopped) {
       console.log(`\n  STOPPED: ${stopped.message}`);
       console.log(`  ${results.length + done.size} record(s) saved in ${relOut}`);
-      console.log(`\n  Refill the quota (or add another key), then resume with the same runId:`);
+      console.log(`\n  Fix the cause above, then resume with the same runId:`);
       console.log(`    node src/run.js --config ${args.config} ${args.limit ? `--limit ${args.limit} ` : ''}--runs ${runs} --out ${runId}\n`);
       process.exitCode = 2;
       return;

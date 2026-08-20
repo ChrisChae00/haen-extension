@@ -22,8 +22,24 @@ export class AllKeysExhausted extends Error {
     super(`all ${keyCount} API key(s) hit their quota: ${cause.message}`);
     this.name = 'AllKeysExhausted';
     this.keyCount = keyCount;
+    this.fatal = true;
   }
 }
+
+// Raised when the network goes away mid-run. A laptop that changes wifi, sleeps, or
+// walks out of range fails every remaining item in milliseconds, and those rows are
+// written to predictions.jsonl where resume skips them forever - 145 of 424 items were
+// lost that way overnight. A model does not stop being reachable for 10 items in a row
+// on its own, so the streak is treated as a run-level fault, not 145 measurements.
+export class NetworkGone extends Error {
+  constructor(streak, cause) {
+    super(`${streak} consecutive network failures - the connection is gone: ${cause.message}`);
+    this.name = 'NetworkGone';
+    this.fatal = true;
+  }
+}
+
+const NETWORK_FAILURE_STREAK = 10;
 
 export function makeHaenProvider(config) {
   // One instance per config, not a module singleton: TranslatorAPI's cache is an
@@ -35,6 +51,8 @@ export function makeHaenProvider(config) {
   // exhausted for the rest of the run, so remember where rotation left off instead of
   // re-discovering it (and eating a RateLimitError's retry backoff) on every item.
   let keyIndex = 0;
+  // Same reasoning as keyIndex: the streak spans items, not attempts within one item.
+  let networkFailures = 0;
 
   return async function translate(item) {
     // onRaw fires once per HTTP response that carried a body, so counting it gives the
@@ -103,6 +121,7 @@ export function makeHaenProvider(config) {
           // If config.stream is true, pass a dummy onChunk to measure streaming TTFB
           ...(config.stream ? { onChunk: () => {} } : {}),
         });
+        networkFailures = 0;
         break;
       } catch (e) {
         if (e.name === 'RateLimitError') {
@@ -120,6 +139,9 @@ export function makeHaenProvider(config) {
         // those rows poison the run permanently. Observed: 384 of 424 items burned in
         // seconds. Stop like an exhausted quota does and keep what actually measured.
         if (e.name === 'InvalidKeyError') throw new AllKeysExhausted(apiKeys.length, e);
+        if (e.name === 'NetworkError' || e.name === 'TypeError') {
+          if (++networkFailures >= NETWORK_FAILURE_STREAK) throw new NetworkGone(networkFailures, e);
+        }
         error = { name: e.name, message: e.message, status: e.status ?? null };
         break;
       }
