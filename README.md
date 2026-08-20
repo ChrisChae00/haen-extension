@@ -26,12 +26,17 @@ Built with a focus on performance, reliability, and user experience, Haen showca
 - **Modern Chrome Extension APIs (MV3)**: Fully integrated into the Chrome Side Panel for a persistent user workflow, strictly adhering to Manifest V3 Content Security Policy (CSP) with a modular architecture.
 - **Robust Design System & A11y**: Built a custom token-based theme engine enforcing accessibility contrast standards, with seamless 3-way theme control (Light/Dark/System) and smooth transitions.
 - **Multi-Provider LLM Support**: Dynamically handles APIs from Groq, OpenRouter, and Google (Gemini), automatically adjusting payload parameters based on provider requirements.
-- **Reproducible Benchmark Harness**: Built a KO↔EN benchmark (FLORES-200 + hand-built, n=212) that scores any
-  model Haen can call on COMET, chrF++, 15-rule compliance, latency and cost, pinning the git SHA, dataset
-  checksums and a system-prompt hash to every result. A local `qwen3:14b` (Q4, $0) lands **0.8849 COMET vs
-  Gemini 3.5 Flash Lite's 0.8926 with overlapping confidence intervals** and 100% schema compliance — at 25x
-  the latency, which is the actual trade-off the number is there to expose.
-- **Fast Compliance Test Suite**: Built a zero-dependency compliance test suite (`node --test`) enforcing 15 schema and Hanja rules, **verified in under 3 seconds per run (42.66ms)**.
+- **Reproducible Benchmark Harness**: Built a KO↔EN benchmark (FLORES-200 + hand-built, n=212 × 2–3 runs)
+  that scores every model Haen can call on COMET, chrF++, 15-rule compliance, latency, streaming TTFB and
+  cost — pinning the git SHA, dataset checksums and a system-prompt hash to each result, and flagging runs
+  measured on a dirty tree so the cross-model table can't silently compare two different harnesses.
+  Across five models the COMET confidence intervals **all overlap (0.8857–0.8924)**: quality does not
+  separate them, so the harness reports what does. A local `qwen3:14b` (Q4) holds **100% on all 15 rules at
+  $0**, at 27× the latency of the fastest hosted model — while `qwen3.6-27b`, statistically tied on COMET,
+  prefixes 46% of its answers with prose the schema forbids. See [`bench/REPORT.md`](bench/REPORT.md).
+- **Fast Test Suite**: Zero-dependency `node --test` suite covering the 15 schema and Hanja compliance rules
+  plus reasoning-model output parsing, pool pacing, and the key-rotation / run-stop logic that decides
+  whether a benchmark keeps recording — **34 tests in ~150ms**.
 
 ---
 
