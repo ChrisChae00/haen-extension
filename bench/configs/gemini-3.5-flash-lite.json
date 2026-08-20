@@ -1,21 +1,23 @@
 {
-  "name": "REPLACE-short-slug-used-in-the-run-id",
+  "name": "gemini-3.5-flash-lite",
   "harness": "haen",
-  "provider": "groq",
-  "modelId": "REPLACE-exact-model-id-never-an-evergreen-alias",
-  "apiKeyEnv": "GROQ_API_KEY",
+  "provider": "google",
+  "modelId": "gemini-3.5-flash-lite",
+  "apiKeyEnv": "GEMINI_API_KEY",
 
   "uiLanguage": "ko",
   "temperature": 0,
   "jsonMode": true,
-  "maxTokens": null,
+  "maxTokens": 768,
+  "stream": true,
 
   "datasetVersion": "v1",
   "datasets": ["flores.jsonl", "handbuilt.jsonl"],
   "limit": null,
 
   "runs": 3,
-  "concurrency": 4,
+  "concurrency": 1,
+  "minIntervalMs": 4200,
 
   "judgeModelId": null
 }

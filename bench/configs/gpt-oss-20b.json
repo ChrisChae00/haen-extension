@@ -1,0 +1,27 @@
+{
+  "name": "gpt-oss-20b",
+  "harness": "haen",
+  "provider": "openrouter",
+  "modelId": "openai/gpt-oss-20b",
+  "apiKeyEnv": "OPENROUTER_API_KEY",
+  "uiLanguage": "ko",
+  "temperature": 0,
+  "jsonMode": false,
+  "stream": true,
+  "datasetVersion": "v1",
+  "datasets": [
+    "flores.jsonl",
+    "handbuilt.jsonl"
+  ],
+  "limit": null,
+  "runs": 3,
+  "concurrency": 1,
+  "judgeModelId": null,
+  "maxTokens": 2048,
+  "providerRouting": {
+    "order": [
+      "Groq"
+    ],
+    "allow_fallbacks": false
+  }
+}

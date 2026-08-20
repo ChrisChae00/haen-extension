@@ -48,3 +48,9 @@ bench/datasets/*/flores.jsonl
 # regenerating them costs real money.
 # Commit only the summaries, by copying metrics.json + report.md into results-committed/.
 bench/results/
+# Same for runs pulled out of the comparison (dead model, failed run) but kept on disk.
+bench/results_archive/
+# Local-only working notes: handoffs, investigation memos, session state.
+# Deliberately not committed - these are scratch context for whoever picks the work up
+# next, not project documentation, and they go stale the moment they are.
+/docs/

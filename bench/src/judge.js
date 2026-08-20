@@ -142,17 +142,33 @@ async function main() {
     const item = byId.get(record.id);
     let raw = '';
     try {
-      // Reusing TranslatorAPI for its retry and error handling. The rubric replaces the
-      // translation prompt via promptOverride; the judge is not translating anything.
-      await api.translate(buildUserMessage(item, record), {
-        apiKey,
-        provider: config.judgeProvider ?? config.provider,
-        modelId: config.judgeModelId,
-        temperature: 0,
-        systemPromptOverride: RUBRIC,
-        onRaw: body => { raw = body; },
-      }).catch(() => {});
-      const { scores, note } = extractVerdict(raw);
+      // One retry: a judge call that comes back with a truncated body is not a verdict of
+      // "unjudgeable", it is a transient. Without this, the item is dropped from the
+      // subset silently and the model is scored on a smaller n than its peers - which is
+      // exactly the comparison the subset exists to make.
+      let verdict = null;
+      for (let attempt = 0; attempt < 2 && !verdict; attempt++) {
+        // Cleared per attempt. The call below swallows its own error, so without this the
+        // retry would re-judge attempt 1's truncated body and fail identically - a retry
+        // that only looks like one.
+        raw = '';
+        // Reusing TranslatorAPI for its retry and error handling. The rubric replaces the
+        // translation prompt via promptOverride; the judge is not translating anything.
+        await api.translate(buildUserMessage(item, record), {
+          apiKey,
+          provider: config.judgeProvider ?? config.provider,
+          modelId: config.judgeModelId,
+          temperature: 0,
+          systemPromptOverride: RUBRIC,
+          onRaw: body => { raw = body; },
+        }).catch(() => {});
+        try {
+          verdict = extractVerdict(raw);
+        } catch (e) {
+          if (attempt === 1) throw e;
+        }
+      }
+      const { scores, note } = verdict;
       appendFileSync(outFile, JSON.stringify({
         id: record.id, slice: record.slice, judgeModelId: config.judgeModelId, rubricHash: RUBRIC_HASH, scores, note,
       }) + '\n');

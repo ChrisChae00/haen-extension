@@ -25,7 +25,14 @@ node src/run.js --config configs/<name>.json
 # 4. score it
 python3 -m venv .venv && .venv/bin/pip install -r score/requirements.txt
 .venv/bin/python score/score.py --run-dir results/<run-id>
+
+# 5. fold every scored run into the cross-model table
+python3 generate_summary_report.py                  # -> REPORT.md
 ```
+
+Local models need no key: run `ollama serve`, set `"provider": "ollama"` and
+`"apiKeyEnv": null`. Quota is then zero, which makes a local model the right place to
+validate a harness change before spending a hosted budget on it.
 
 Add a model: copy `configs/_template.json`, add a row to `src/pricing.js`. Nothing else.
 

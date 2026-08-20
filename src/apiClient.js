@@ -81,6 +81,10 @@ export class InvalidResponseError extends Error {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
+// The shipping ceiling. Referenced from both translate() and _translate() so the
+// benchmark's "unset maxTokens keeps the extension's default" contract has one number
+// behind it, not two that can drift apart.
+const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 2;
 const RETRY_DELAYS_MS = [500, 1500];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -97,16 +101,46 @@ function parseSSELine(line) {
   try { return JSON.parse(line.slice(6)); } catch { return null; }
 }
 
+// Reasoning models (qwen3, gpt-oss) emit a <think> block before the answer. Its prose
+// contains braces and even a sketch of the schema being planned, so the greedy {...}
+// extraction below would splice reasoning into the JSON — and when the answer itself was
+// cut off by max_tokens, parsePartial happily salvaged `"natural": "..."` out of the
+// model's own scratchpad and returned it as a translation. Strip the block first. An
+// unclosed <think> means the answer never arrived; there is nothing to salvage.
+export function stripThinking(raw) {
+  return raw.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<think>[\s\S]*$/, '');
+}
+
+// Exported for the benchmark's parser tests; the extension never calls it directly.
+export const parseForTest = raw => extractResultFromJson(raw);
+
 function extractResultFromJson(raw) {
-  let text = raw.trim();
+  let text = stripThinking(raw).trim();
 
   // Strip markdown code fences some models add (```json ... ``` or ``` ... ```)
   const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)```$/);
   if (fenceMatch) text = fenceMatch[1].trim();
 
-  // Extract first JSON object if model adds prose before/after
-  const objMatch = text.match(/\{[\s\S]*\}/);
-  if (objMatch) text = objMatch[0];
+  // Extract the JSON object if the model adds prose before/after. Not the greedy
+  // first-brace-to-last-brace slice this used to be: some backends stream reasoning as
+  // plain prose with no <think> tags at all (Alibaba's qwen3.6 opens with "Here's a
+  // thinking process:" and sketches the schema, braces and all), so the first `{` is
+  // inside the scratchpad and the slice is unparseable. Every candidate start is tried in
+  // order and the first one that parses into a real result wins, which skips the prose.
+  // ponytail: O(braces × body length) - every `{` costs a slice and a JSON.parse to the
+  // last `}`. Fine at Haen's response size (a few KB, single-digit braces in prose).
+  // If a model ever streams pages of reasoning, bound it: stop after N candidates, or
+  // scan backwards from the last `{` since the answer is always last.
+  const lastBrace = text.lastIndexOf('}');
+  if (lastBrace !== -1) {
+    for (let i = text.indexOf('{'); i !== -1 && i < lastBrace; i = text.indexOf('{', i + 1)) {
+      const candidate = text.slice(i, lastBrace + 1);
+      try {
+        const obj = JSON.parse(candidate);
+        if (typeof obj?.natural === 'string') { text = candidate; break; }
+      } catch { /* prose brace, or a nested object - try the next one */ }
+    }
+  }
 
   console.log('[Haen] raw response:', text.slice(0, 300));
 
@@ -141,8 +175,12 @@ function extractResultFromJson(raw) {
 // is a nested array and isn't safe to partially parse, so it's rendered only
 // once the full response has arrived.
 function extractPartialField(text, field) {
-  const re = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
-  const match = text.match(re);
+  // Global + last match: a reasoning model that plans its answer in prose writes the
+  // field name once in the sketch ("natural": "...") before writing it for real. The
+  // first match is the plan; the last one is the answer.
+  const re = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 'g');
+  const matches = [...text.matchAll(re)];
+  const match = matches.at(-1);
   if (!match) return undefined;
   try {
     return JSON.parse(`"${match[1]}"`);
@@ -153,7 +191,7 @@ function extractPartialField(text, field) {
 
 export function parsePartial(raw) {
   if (!raw) return {};
-  let text = raw.trim();
+  let text = stripThinking(raw).trim();
   const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*)/);
   if (fenceMatch) text = fenceMatch[1];
 
@@ -166,7 +204,7 @@ export function parsePartial(raw) {
 }
 
 export class TranslatorAPI {
-  // provider / modelId / temperature / jsonMode / onRaw are benchmark-facing escape
+  // provider / modelId / temperature / jsonMode / maxTokens / providerRouting / onRaw are benchmark-facing escape
   // hatches. The extension never passes them: provider falls back to key-prefix
   // detection, modelId to the MODEL_IDS lookup, temperature to the shipping default,
   // jsonMode to the NO_JSON_MODE lookup (which only knows the extension's own model
@@ -174,14 +212,17 @@ export class TranslatorAPI {
   // temperature, tell the client whether an arbitrary benchmarked model supports
   // response_format (NO_JSON_MODE can't, since it's keyed on modelKey, not modelId),
   // and capture the raw response body even when parsing fails (parse failures are a
-  // measured result, not just an error).
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, systemPromptOverride, onRaw, onChunk, signal } = {}) {
+  // measured result, not just an error). maxTokens exists because some providers (Groq)
+  // bill their free-tier token budget against the requested ceiling rather than actual
+  // usage, so the harness needs to lower it without changing what the extension sends.
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, maxTokens = DEFAULT_MAX_TOKENS, providerRouting, systemPromptOverride, onRaw, onChunk, signal } = {}) {
     const provider = providerOverride ?? detectProvider(apiKey, modelKey);
     const model = modelId
       ?? MODEL_IDS[provider]?.[modelKey]
       ?? MODEL_IDS[provider]?.[PROVIDER_DEFAULT_MODEL_KEY[provider]];
     const useJsonMode = jsonMode ?? !NO_JSON_MODE.has(modelKey);
-    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, onRaw, onChunk, signal };
+
+    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens, providerRouting, useJsonMode, systemPromptOverride, onRaw, onChunk, signal };
 
     try {
       return await this._translateWithRetry(text, params);
@@ -214,9 +255,10 @@ export class TranslatorAPI {
     throw lastError;
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, useJsonMode, systemPromptOverride, onRaw, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens = DEFAULT_MAX_TOKENS, providerRouting, useJsonMode, systemPromptOverride, onRaw, onChunk, signal }) {
     const systemPrompt = systemPromptOverride ?? buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
+    const startedAt = performance.now();
 
     const timeoutController = new AbortController();
     const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
@@ -246,9 +288,18 @@ export class TranslatorAPI {
             { role: 'user', content: text },
           ],
           ...(useJsonMode && { response_format: { type: 'json_object' } }),
+          // Benchmark-only. OpenRouter routes to the cheapest provider by default, and
+          // "cheapest" is routinely the slowest: gpt-oss-120b came back at 34s/21s TTFB
+          // there versus a few seconds on Groq. That number would land in the report's
+          // latency column as if it were a property of the model. Pinning the backend
+          // makes the serving stack a recorded constant instead of a hidden variable.
+          ...(provider === 'openrouter' && providerRouting ? { provider: providerRouting } : {}),
           stream: useStream,
+          // OpenAI-compatible streaming omits `usage` unless asked; without it every
+          // streamed call would report zero tokens and a $0 cost.
+          ...(useStream && { stream_options: { include_usage: true } }),
           temperature,
-          max_tokens: 2048,
+          max_tokens: maxTokens,
         }),
       });
     } catch (e) {
@@ -271,7 +322,7 @@ export class TranslatorAPI {
     if (!response.ok) throw new NetworkError(`HTTP ${response.status}`, response.status);
 
     if (useStream) {
-      return this._handleStream(response, onChunk, onRaw, combined);
+      return this._handleStream(response, onChunk, onRaw, combined, startedAt);
     }
 
     let json;
@@ -282,16 +333,21 @@ export class TranslatorAPI {
     }
 
     const raw = json.choices?.[0]?.message?.content;
-    onRaw?.(raw ?? '', json.usage);
+    // TTFB is a streaming-only concept: without a stream, "first byte" and "full body"
+    // arrive in the same event, so this field would just restate latencyMs under a
+    // misleading name. Leave it null here; only _handleStream measures a real TTFB.
+    onRaw?.(raw ?? '', json.usage, { ttfbMs: null });
     if (!raw) throw new InvalidResponseError('Empty content in response');
     return extractResultFromJson(raw);
   }
 
-  async _handleStream(response, onChunk, onRaw, signal) {
+  async _handleStream(response, onChunk, onRaw, signal, startedAt = performance.now()) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let lineBuffer = '';
     let contentAccumulated = '';
+    let ttfbMs = null;
+    let usage = null;
 
     try {
       while (true) {
@@ -309,8 +365,14 @@ export class TranslatorAPI {
 
         for (const line of completeLines) {
           const chunk = parseSSELine(line.trim());
+          // With stream_options.include_usage, the final chunk carries usage and an
+          // empty choices array instead of a delta.
+          if (chunk?.usage) usage = chunk.usage;
           const delta = chunk?.choices?.[0]?.delta?.content;
           if (delta) {
+            if (ttfbMs === null) {
+              ttfbMs = Math.round(performance.now() - startedAt);
+            }
             contentAccumulated += delta;
             onChunk(contentAccumulated);
           }
@@ -320,7 +382,7 @@ export class TranslatorAPI {
       reader.releaseLock();
     }
 
-    onRaw?.(contentAccumulated);
+    onRaw?.(contentAccumulated, usage, { ttfbMs: ttfbMs ?? Math.round(performance.now() - startedAt) });
     if (!contentAccumulated) throw new InvalidResponseError('Empty stream response');
     return extractResultFromJson(contentAccumulated);
   }

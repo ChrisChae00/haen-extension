@@ -1,15 +1,18 @@
-import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, appendFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildSystemPrompt } from '../../src/prompts.js';
 import { makeProvider } from './providers/index.js';
 import { loadDataset } from './dataset.js';
 import { priceFor, costUSD } from './pricing.js';
 
 const HARNESS_VERSION = '1.0.0';
-const RESULTS_DIR = new URL('../results/', import.meta.url).pathname;
-const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+// fileURLToPath, not URL.pathname: pathname is percent-encoded, so a checkout under a
+// path containing a space or '#' produces a directory name that does not exist.
+const RESULTS_DIR = fileURLToPath(new URL('../results/', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 function parseArgs(argv) {
   const args = { runs: null, limit: null, dryRun: false, config: null, out: null };
@@ -57,19 +60,54 @@ function promptHash(uiLanguage) {
 // Never used for billing - actual `usage` from the API is what the cost report uses.
 const CHARS_PER_TOKEN = 3.5;
 const ASSUMED_OUTPUT_TOKENS = 400;
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function mapPool(items, concurrency, fn) {
+// minIntervalMs is opt-in (config.minIntervalMs), for providers whose free tier caps
+// requests-per-minute low enough that the client's own retry/backoff can't recover
+// within MAX_RETRIES - e.g. Google AI Studio's free tier (15 RPM) sends no Retry-After
+// header, so apiClient's retry falls back to its short fixed delays and the request
+// just fails instead of waiting out the real reset window. Pacing calls here keeps the
+// benchmark honest without changing the shipped extension's retry policy.
+export async function mapPool(items, concurrency, fn, minIntervalMs = 0) {
+  // The sleep is per-worker and lands *after* an item finishes, so it is an inter-request
+  // gap, not a rate limiter: effective RPM is concurrency / (latency + minIntervalMs).
+  // With more than one worker that quietly exceeds the very cap it exists to respect, and
+  // the run turns into a 429 storm instead of a measurement.
+  // ponytail: pin the assumption instead of building a token bucket. Promote to a real
+  // rate limiter if multi-worker pacing is ever actually needed.
+  if (minIntervalMs && concurrency > 1) {
+    throw new Error(`minIntervalMs pacing requires concurrency: 1 (got ${concurrency})`);
+  }
   const results = new Array(items.length);
+  // Which indices actually ran. Filtering on `results[i] !== undefined` would conflate
+  // "this worker stopped early" with "fn legitimately returned undefined", and silently
+  // drop the latter from the run.
+  const completed = new Set();
   let next = 0;
+  // Set by a worker whose fn threw a fatal error (dead quota, dead key, dead network).
+  // The others finish their current item and stop rather than each burning a full retry
+  // cycle - and, worse, writing a failure row per remaining item that resume would skip.
+  let stop = null;
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (true) {
+      if (stop) return;
       const i = next++;
       if (i >= items.length) return;
-      results[i] = await fn(items[i], i);
+      try {
+        results[i] = await fn(items[i], i);
+        completed.add(i);
+      } catch (e) {
+        if (!e.fatal) throw e;
+        stop = e;
+        return;
+      }
+      // Not after the worker's last item: that delay paces nothing and just burns
+      // minIntervalMs of wall clock per worker, per run.
+      if (minIntervalMs && next < items.length) await sleep(minIntervalMs);
     }
   });
   await Promise.all(workers);
-  return results;
+  return { results: results.filter((_, i) => completed.has(i)), stopped: stop };
 }
 
 function dryRun(config, items, runs) {
@@ -137,32 +175,68 @@ async function main() {
 
   const translate = makeProvider(config);
   const predictionsFile = path.join(outDir, 'predictions.jsonl');
-  writeFileSync(predictionsFile, '');
+  // Resume: whatever is already on disk for this runId stays, and its (runIndex, id) pairs
+  // are skipped. A run stopped by quota exhaustion is picked up with the same --out once
+  // the quota refills, instead of paying for the completed items twice.
+  const done = new Set();
+  if (existsSync(predictionsFile)) {
+    for (const line of readFileSync(predictionsFile, 'utf8').split('\n')) {
+      if (!line) continue;
+      const r = JSON.parse(line);
+      done.add(`${r.runIndex}:${r.id}`);
+    }
+    if (done.size) console.log(`\n  resuming: ${done.size} record(s) already on disk`);
+  } else {
+    writeFileSync(predictionsFile, '');
+  }
 
   // Three runs of the same config, because temperature 0 does not mean deterministic.
   // Batched serving stacks reorder floating-point accumulation depending on what else is
   // in the batch, so identical inputs can produce different outputs. score.py turns the
   // spread across these runs into runVariance - the noise floor that any model-to-model
   // gap has to clear before it means anything.
+  const relOut = path.relative(process.cwd(), outDir);
   for (let runIndex = 0; runIndex < runs; runIndex++) {
-    let done = 0;
+    const todo = items.filter(it => !done.has(`${runIndex}:${it.id}`));
+    if (!todo.length) {
+      console.log(`  run ${runIndex + 1}/${runs}  already complete, skipping`);
+      continue;
+    }
+    let finished = 0;
     const started = Date.now();
-    const records = await mapPool(items, config.concurrency ?? 4, async item => {
+    const { results, stopped } = await mapPool(todo, config.concurrency ?? 4, async item => {
       const rec = await translate(item);
-      done++;
-      if (done % 25 === 0 || done === items.length) {
-        process.stdout.write(`\r\x1b[K  run ${runIndex + 1}/${runs}  ${done}/${items.length}`);
+      // Appended per item, not per run: a run killed midway (quota, Ctrl-C, crash) used to
+      // lose every completed item because the single write happened only at the end.
+      appendFileSync(predictionsFile, JSON.stringify({ ...rec, runIndex }) + '\n');
+      finished++;
+      if (finished % 25 === 0 || finished === todo.length) {
+        process.stdout.write(`\r\x1b[K  run ${runIndex + 1}/${runs}  ${finished}/${todo.length}`);
       }
       return { ...rec, runIndex };
-    });
-    appendFileSync(predictionsFile, records.map(r => JSON.stringify(r)).join('\n') + '\n');
+    }, config.minIntervalMs ?? 0);
 
-    const failures = records.filter(r => r.error).length;
-    console.log(`\r\x1b[K  run ${runIndex + 1}/${runs}  ${items.length}/${items.length}  ${Math.round((Date.now() - started) / 1000)}s  ${failures} failed`);
+    const failures = results.filter(r => r.error).length;
+    console.log(`\r\x1b[K  run ${runIndex + 1}/${runs}  ${results.length}/${todo.length}  ${Math.round((Date.now() - started) / 1000)}s  ${failures} failed`);
+
+    if (stopped) {
+      console.log(`\n  STOPPED: ${stopped.message}`);
+      console.log(`  ${results.length + done.size} record(s) saved in ${relOut}`);
+      console.log(`\n  Fix the cause above, then resume with the same runId:`);
+      console.log(`    node src/run.js --config ${args.config} ${args.limit ? `--limit ${args.limit} ` : ''}--runs ${runs} --out ${runId}\n`);
+      process.exitCode = 2;
+      return;
+    }
   }
 
   console.log(`\n  wrote ${outDir}`);
-  console.log(`  next: python3 score/score.py --run-dir ${path.relative(process.cwd(), outDir)}\n`);
+  console.log(`  next: python3 score/score.py --run-dir ${relOut}\n`);
 }
 
-main().catch(e => { console.error(`\n${e.message}\n`); process.exit(1); });
+// Only when invoked as the CLI: run.test.js imports mapPool from here, and an
+// import must not kick off a benchmark. fileURLToPath because URL.pathname is
+// percent-encoded - under a checkout path with a space the comparison never matches and
+// `node src/run.js` becomes a silent no-op that exits 0 having measured nothing.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(e => { console.error(`\n${e.message}\n`); process.exit(1); });
+}

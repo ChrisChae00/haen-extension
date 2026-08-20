@@ -103,6 +103,13 @@ def score_comet(srcs, hyps, refs, model_name="Unbabel/wmt22-comet-da", batch_siz
     non-commercial dependency in a project that ships publicly.
     """
     from comet import download_model, load_from_checkpoint
+    import torch
+
+    # unbabel-comet's DataLoader setup picks multiprocessing_context="fork" whenever
+    # torch.backends.mps.is_available() is true, regardless of the gpus=0 passed below -
+    # then crashes because that context requires num_workers > 0. We're not asking for
+    # MPS acceleration here, so just report it unavailable to sidestep the library bug.
+    torch.backends.mps.is_available = lambda: False
 
     model = load_from_checkpoint(download_model(model_name))
     data = [{"src": s, "mt": h, "ref": r} for s, h, r in zip(srcs, hyps, refs)]
@@ -139,6 +146,7 @@ def percentile(sorted_vals, p):
 
 def operational(records, config, pricing):
     lat = sorted(r["latencyMs"] for r in records)
+    ttfb = sorted(r["ttfbMs"] for r in records if r.get("ttfbMs") is not None)
     prompt_toks = sum((r.get("usage") or {}).get("prompt_tokens", 0) for r in records)
     completion_toks = sum((r.get("usage") or {}).get("completion_tokens", 0) for r in records)
     n = len(records)
@@ -150,14 +158,18 @@ def operational(records, config, pricing):
 
     price = pricing.get(config["modelId"])
     cost_per_1k = None
-    if price and n:
+    # A local model legitimately has 0 tokens billed. A hosted model with 0 tokens means
+    # usage never came back (e.g. a streaming response with no stream_options.include_usage)
+    # - reporting $0.0000 for that would read as "free" instead of "unmeasured".
+    if config.get("provider") == "ollama":
+        cost_per_1k = 0.0
+    elif price and n and (prompt_toks or completion_toks):
         per_item = (prompt_toks / n / 1e6) * price["inputPer1M"] + (completion_toks / n / 1e6) * price["outputPer1M"]
         cost_per_1k = round(per_item * 1000, 4)
-    elif config.get("provider") == "ollama":
-        cost_per_1k = 0.0
 
     return {
         "latencyMs": {"p50": percentile(lat, 0.50), "p90": percentile(lat, 0.90), "p99": percentile(lat, 0.99)},
+        "ttfbMs": {"p50": percentile(ttfb, 0.50), "p90": percentile(ttfb, 0.90), "p99": percentile(ttfb, 0.99)} if ttfb else None,
         "tokens": {
             "promptTotal": prompt_toks,
             "completionTotal": completion_toks,
@@ -169,6 +181,17 @@ def operational(records, config, pricing):
         "failureRate": round(sum(errors.values()) / n, 4) if n else None,
         "errorsByType": dict(errors),
         "retryRate": round(sum(1 for r in records if r.get("retries", 0) > 0) / n, 4) if n else None,
+        # Share of items where a broken stream was silently re-issued non-streaming
+        # (src/apiClient.js:204). Those items are graded on the non-streaming body, and
+        # without the harness preserving the first TTFB they would drop out of the
+        # percentiles entirely - so this rate is what says whether the streaming numbers
+        # above describe the whole set or a survivor subset.
+        # None, not 0.0, for runs recorded before the field existed: those are unmeasured,
+        # and printing 0% would claim clean streaming on data that cannot support it.
+        "streamFallbackRate": (
+            round(sum(1 for r in records if r.get("streamFallback")) / n, 4)
+            if n and any("streamFallback" in r for r in records) else None
+        ),
     }
 
 
@@ -314,17 +337,26 @@ def write_report(m, path):
     L.append("| | |")
     L.append("|---|---|")
     L.append(f"| latency p50 / p90 / p99 | {op['latencyMs']['p50']} / {op['latencyMs']['p90']} / {op['latencyMs']['p99']} ms |")
+    if op.get('ttfbMs'):
+        L.append(f"| streaming TTFB p50 / p90 / p99 | {op['ttfbMs']['p50']} / {op['ttfbMs']['p90']} / {op['ttfbMs']['p99']} ms |")
     L.append(f"| mean tokens in / out | {op['tokens']['promptMean']} / {op['tokens']['completionMean']} |")
     L.append(f"| cost per 1,000 translations | {'—' if op['costPer1kTranslations'] is None else '$' + format(op['costPer1kTranslations'], '.4f')} |")
     L.append(f"| **prices as of** | **{op['pricesFetchedAt'] or 'UNKNOWN — no pricing row'}** |")
     L.append(f"| failure rate | {pct(op['failureRate'])} |")
     L.append(f"| retry rate | {pct(op['retryRate'])} |")
+    L.append(f"| stream fallback rate | {pct(op.get('streamFallbackRate'))} |")
     if op["errorsByType"]:
         L.append(f"| errors | {', '.join(f'{k}×{v}' for k, v in op['errorsByType'].items())} |")
     L.append("")
     L.append("Latency is wall-clock around the whole `translate()` call, including the client's")
     L.append("internal retries — that is what a user experiences. Retry rate is reported separately")
     L.append("so a slow p99 caused by retries is distinguishable from a slow model.\n")
+    L.append("Stream fallback rate is the share of items whose streamed body failed to parse and")
+    L.append("were silently re-issued non-streaming. At 0% the streaming TTFB row covers every item")
+    L.append("and compliance was graded on streamed output; above 0%, that share of the compliance")
+    L.append("numbers describes the non-streaming path instead. `—` means the run predates the")
+    L.append("measurement, so its TTFB percentiles may be missing exactly the items that streamed")
+    L.append("badly — not that none did.\n")
 
     if m.get("judge"):
         L.append("## Structured-output quality (LLM-as-judge)\n")
