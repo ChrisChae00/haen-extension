@@ -51,3 +51,11 @@ test('an ordinary error still propagates instead of silently truncating the run'
     /boom/,
   );
 });
+
+// A worker that returns undefined is a legitimate result, not a hole. The pool used to
+// infer "did this index run?" from `results[i] !== undefined`, which silently dropped it.
+test('an undefined return is kept, not mistaken for an item that never ran', async () => {
+  const { results, stopped } = await mapPool([1, 2, 3], 1, async x => (x === 2 ? undefined : x));
+  assert.deepEqual(results, [1, undefined, 3]);
+  assert.equal(stopped, null);
+});

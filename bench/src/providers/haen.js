@@ -31,6 +31,10 @@ export class AllKeysExhausted extends Error {
 // written to predictions.jsonl where resume skips them forever - 145 of 424 items were
 // lost that way overnight. A model does not stop being reachable for 10 items in a row
 // on its own, so the streak is treated as a run-level fault, not 145 measurements.
+// Only fetch-level failures count (NetworkError with no HTTP status: DNS, refused
+// connection, the 30s timeout). An HTTP 5xx also arrives as NetworkError but carries a
+// status - the connection reached the provider, so it is the provider failing, which is
+// a measurement, not a dead link.
 export class NetworkGone extends Error {
   constructor(streak, cause) {
     super(`${streak} consecutive network failures - the connection is gone: ${cause.message}`);
@@ -41,11 +45,10 @@ export class NetworkGone extends Error {
 
 const NETWORK_FAILURE_STREAK = 10;
 
-export function makeHaenProvider(config) {
-  // One instance per config, not a module singleton: TranslatorAPI's cache is an
-  // instance field, and a shared cache across configs would let one config's response
-  // leak into another's run.
-  const api = new TranslatorAPI();
+// `api` is injectable so the key-rotation and network-streak logic below can be tested
+// without a network - it is the logic that decides whether a run keeps writing rows or
+// stops, and it has already lost a run's worth of items once by getting that wrong.
+export function makeHaenProvider(config, api = new TranslatorAPI()) {
   const apiKeys = resolveApiKeys(config);
   // Shared across items, not reset per item: once a key is quota-exhausted it stays
   // exhausted for the rest of the run, so remember where rotation left off instead of
@@ -62,7 +65,7 @@ export function makeHaenProvider(config) {
     let raw = '';
     let usage = null;
     let attempts = 0;
-    let meta = { ttfbMs: null, cached: false };
+    let meta = { ttfbMs: null };
     // apiClient retries a broken stream once with onChunk removed (src/apiClient.js:204).
     // That second onRaw carries ttfbMs: null, and letting it overwrite the streaming meta
     // drops the item from the TTFB percentiles entirely - so exactly the items where
@@ -99,10 +102,6 @@ export function makeHaenProvider(config) {
           uiLanguage: config.uiLanguage ?? 'ko',
           direction: item.direction,
           temperature: config.temperature ?? 0,
-          // Always off: the harness runs the same config 3x to measure model
-          // non-determinism (see run.js), and a cache hit on run 2/3 would replay run 1's
-          // response, making every model look perfectly deterministic.
-          enableCache: false,
           // apiClient's own NO_JSON_MODE table is keyed on the extension's model keys
           // (llama4, kimi, ...), not on an arbitrary benchmarked modelId, so it can't tell
           // whether a model under test supports response_format. Default true (most
@@ -139,8 +138,19 @@ export function makeHaenProvider(config) {
         // those rows poison the run permanently. Observed: 384 of 424 items burned in
         // seconds. Stop like an exhausted quota does and keep what actually measured.
         if (e.name === 'InvalidKeyError') throw new AllKeysExhausted(apiKeys.length, e);
-        if (e.name === 'NetworkError' || e.name === 'TypeError') {
+        // A TypeError here is a harness bug, not a transient: apiClient converts every
+        // fetch-level failure into NetworkError, so nothing legitimate reaches this line
+        // under that name. Rethrowing crashes the run loudly (mapPool only swallows
+        // e.fatal) instead of writing 424 fabricated failure rows that resume would skip.
+        if (e instanceof TypeError) throw e;
+        if (e.name === 'NetworkError' && e.status == null) {
           if (++networkFailures >= NETWORK_FAILURE_STREAK) throw new NetworkGone(networkFailures, e);
+        } else {
+          // The streak means *consecutive*. Any other outcome - a 5xx, a parse failure -
+          // proves the connection is alive, so it breaks the run of dead-link failures.
+          // Without this reset, ten network blips spread across a whole run accumulate
+          // into a false "the connection is gone" and kill a healthy run.
+          networkFailures = 0;
         }
         error = { name: e.name, message: e.message, status: e.status ?? null };
         break;
@@ -163,7 +173,6 @@ export function makeHaenProvider(config) {
       latencyMs,
       ttfbMs: meta.ttfbMs,
       streamFallback,
-      cached: meta.cached ?? false,
       retries: Math.max(0, attempts - 1),
       error,
       compliance: checkCompliance(raw, parsed, item, {

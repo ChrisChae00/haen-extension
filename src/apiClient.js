@@ -81,6 +81,10 @@ export class InvalidResponseError extends Error {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
+// The shipping ceiling. Referenced from both translate() and _translate() so the
+// benchmark's "unset maxTokens keeps the extension's default" contract has one number
+// behind it, not two that can drift apart.
+const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 2;
 const RETRY_DELAYS_MS = [500, 1500];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -123,6 +127,10 @@ function extractResultFromJson(raw) {
   // thinking process:" and sketches the schema, braces and all), so the first `{` is
   // inside the scratchpad and the slice is unparseable. Every candidate start is tried in
   // order and the first one that parses into a real result wins, which skips the prose.
+  // ponytail: O(braces × body length) - every `{` costs a slice and a JSON.parse to the
+  // last `}`. Fine at Haen's response size (a few KB, single-digit braces in prose).
+  // If a model ever streams pages of reasoning, bound it: stop after N candidates, or
+  // scan backwards from the last `{` since the answer is always last.
   const lastBrace = text.lastIndexOf('}');
   if (lastBrace !== -1) {
     for (let i = text.indexOf('{'); i !== -1 && i < lastBrace; i = text.indexOf('{', i + 1)) {
@@ -196,11 +204,7 @@ export function parsePartial(raw) {
 }
 
 export class TranslatorAPI {
-  constructor() {
-    this._cache = new Map();
-  }
-
-  // provider / modelId / temperature / jsonMode / maxTokens / onRaw / enableCache are benchmark-facing escape
+  // provider / modelId / temperature / jsonMode / maxTokens / providerRouting / onRaw are benchmark-facing escape
   // hatches. The extension never passes them: provider falls back to key-prefix
   // detection, modelId to the MODEL_IDS lookup, temperature to the shipping default,
   // jsonMode to the NO_JSON_MODE lookup (which only knows the extension's own model
@@ -211,21 +215,14 @@ export class TranslatorAPI {
   // measured result, not just an error). maxTokens exists because some providers (Groq)
   // bill their free-tier token budget against the requested ceiling rather than actual
   // usage, so the harness needs to lower it without changing what the extension sends.
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, maxTokens = 2048, providerRouting, systemPromptOverride, enableCache = false, onRaw, onChunk, signal } = {}) {
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, maxTokens = DEFAULT_MAX_TOKENS, providerRouting, systemPromptOverride, onRaw, onChunk, signal } = {}) {
     const provider = providerOverride ?? detectProvider(apiKey, modelKey);
     const model = modelId
       ?? MODEL_IDS[provider]?.[modelKey]
       ?? MODEL_IDS[provider]?.[PROVIDER_DEFAULT_MODEL_KEY[provider]];
     const useJsonMode = jsonMode ?? !NO_JSON_MODE.has(modelKey);
 
-    const cacheKey = `${provider}:${model}:${uiLanguage}:${direction}:${text.trim()}`;
-    if (enableCache && this._cache.has(cacheKey)) {
-      const cachedItem = this._cache.get(cacheKey);
-      onRaw?.(cachedItem.raw, cachedItem.usage, { ttfbMs: 0, cached: true });
-      return cachedItem.parsed;
-    }
-
-    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens, providerRouting, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal };
+    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens, providerRouting, useJsonMode, systemPromptOverride, onRaw, onChunk, signal };
 
     try {
       return await this._translateWithRetry(text, params);
@@ -258,7 +255,7 @@ export class TranslatorAPI {
     throw lastError;
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens = 2048, providerRouting, useJsonMode, systemPromptOverride, cacheKey, enableCache, onRaw, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens = DEFAULT_MAX_TOKENS, providerRouting, useJsonMode, systemPromptOverride, onRaw, onChunk, signal }) {
     const systemPrompt = systemPromptOverride ?? buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
     const startedAt = performance.now();
@@ -325,7 +322,7 @@ export class TranslatorAPI {
     if (!response.ok) throw new NetworkError(`HTTP ${response.status}`, response.status);
 
     if (useStream) {
-      return this._handleStream(response, onChunk, onRaw, combined, startedAt, cacheKey, enableCache);
+      return this._handleStream(response, onChunk, onRaw, combined, startedAt);
     }
 
     let json;
@@ -339,17 +336,12 @@ export class TranslatorAPI {
     // TTFB is a streaming-only concept: without a stream, "first byte" and "full body"
     // arrive in the same event, so this field would just restate latencyMs under a
     // misleading name. Leave it null here; only _handleStream measures a real TTFB.
-    const meta = { ttfbMs: null, cached: false };
-    onRaw?.(raw ?? '', json.usage, meta);
+    onRaw?.(raw ?? '', json.usage, { ttfbMs: null });
     if (!raw) throw new InvalidResponseError('Empty content in response');
-    const parsed = extractResultFromJson(raw);
-    if (enableCache && cacheKey && parsed) {
-      this._cache.set(cacheKey, { raw, usage: json.usage, parsed });
-    }
-    return parsed;
+    return extractResultFromJson(raw);
   }
 
-  async _handleStream(response, onChunk, onRaw, signal, startedAt = performance.now(), cacheKey = null, enableCache = false) {
+  async _handleStream(response, onChunk, onRaw, signal, startedAt = performance.now()) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let lineBuffer = '';
@@ -390,13 +382,8 @@ export class TranslatorAPI {
       reader.releaseLock();
     }
 
-    const meta = { ttfbMs: ttfbMs ?? Math.round(performance.now() - startedAt), cached: false };
-    onRaw?.(contentAccumulated, usage, meta);
+    onRaw?.(contentAccumulated, usage, { ttfbMs: ttfbMs ?? Math.round(performance.now() - startedAt) });
     if (!contentAccumulated) throw new InvalidResponseError('Empty stream response');
-    const parsed = extractResultFromJson(contentAccumulated);
-    if (enableCache && cacheKey && parsed) {
-      this._cache.set(cacheKey, { raw: contentAccumulated, usage, parsed });
-    }
-    return parsed;
+    return extractResultFromJson(contentAccumulated);
   }
 }

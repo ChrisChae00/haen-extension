@@ -148,8 +148,12 @@ async function main() {
       // exactly the comparison the subset exists to make.
       let verdict = null;
       for (let attempt = 0; attempt < 2 && !verdict; attempt++) {
-      // Reusing TranslatorAPI for its retry and error handling. The rubric replaces the
-      // translation prompt via promptOverride; the judge is not translating anything.
+        // Cleared per attempt. The call below swallows its own error, so without this the
+        // retry would re-judge attempt 1's truncated body and fail identically - a retry
+        // that only looks like one.
+        raw = '';
+        // Reusing TranslatorAPI for its retry and error handling. The rubric replaces the
+        // translation prompt via promptOverride; the judge is not translating anything.
         await api.translate(buildUserMessage(item, record), {
           apiKey,
           provider: config.judgeProvider ?? config.provider,

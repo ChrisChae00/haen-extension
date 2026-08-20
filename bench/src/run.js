@@ -2,14 +2,17 @@ import { readFileSync, writeFileSync, mkdirSync, appendFileSync, existsSync } fr
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildSystemPrompt } from '../../src/prompts.js';
 import { makeProvider } from './providers/index.js';
 import { loadDataset } from './dataset.js';
 import { priceFor, costUSD } from './pricing.js';
 
 const HARNESS_VERSION = '1.0.0';
-const RESULTS_DIR = new URL('../results/', import.meta.url).pathname;
-const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+// fileURLToPath, not URL.pathname: pathname is percent-encoded, so a checkout under a
+// path containing a space or '#' produces a directory name that does not exist.
+const RESULTS_DIR = fileURLToPath(new URL('../results/', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 function parseArgs(argv) {
   const args = { runs: null, limit: null, dryRun: false, config: null, out: null };
@@ -76,6 +79,10 @@ export async function mapPool(items, concurrency, fn, minIntervalMs = 0) {
     throw new Error(`minIntervalMs pacing requires concurrency: 1 (got ${concurrency})`);
   }
   const results = new Array(items.length);
+  // Which indices actually ran. Filtering on `results[i] !== undefined` would conflate
+  // "this worker stopped early" with "fn legitimately returned undefined", and silently
+  // drop the latter from the run.
+  const completed = new Set();
   let next = 0;
   // Set by a worker whose fn threw a fatal error (dead quota, dead key, dead network).
   // The others finish their current item and stop rather than each burning a full retry
@@ -88,6 +95,7 @@ export async function mapPool(items, concurrency, fn, minIntervalMs = 0) {
       if (i >= items.length) return;
       try {
         results[i] = await fn(items[i], i);
+        completed.add(i);
       } catch (e) {
         if (!e.fatal) throw e;
         stop = e;
@@ -99,7 +107,7 @@ export async function mapPool(items, concurrency, fn, minIntervalMs = 0) {
     }
   });
   await Promise.all(workers);
-  return { results: results.filter(r => r !== undefined), stopped: stop };
+  return { results: results.filter((_, i) => completed.has(i)), stopped: stop };
 }
 
 function dryRun(config, items, runs) {
@@ -226,7 +234,9 @@ async function main() {
 }
 
 // Only when invoked as the CLI: run.test.js imports mapPool from here, and an
-// import must not kick off a benchmark.
-if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
+// import must not kick off a benchmark. fileURLToPath because URL.pathname is
+// percent-encoded - under a checkout path with a space the comparison never matches and
+// `node src/run.js` becomes a silent no-op that exits 0 having measured nothing.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(e => { console.error(`\n${e.message}\n`); process.exit(1); });
 }
