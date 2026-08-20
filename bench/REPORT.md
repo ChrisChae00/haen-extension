@@ -20,10 +20,14 @@ Benchmarked **5 model(s)**: gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qw
 | Model | identical output rate | chrF++ stdev (tie threshold) | failure rate | retry rate | git sha | prompt hash |
 |---|---|---|---|---|---|---|
 | qwen3-14b-local | 100.0% | 0.000 (±0.000) | 0.0% | 0.0% | `61c2d7f42f65` | `3d18dda71bc9…` |
-| gemini-3.5-flash-lite | 0.0% | 0.431 (±0.863) | 0.0% | 0.0% | `605c26d89eef` | `3d18dda71bc9…` |
-| gpt-oss-120b | 0.0% | 0.072 (±0.144) | 0.0% | 0.0% | `bbf73e1a308e` | `3d18dda71bc9…` |
-| qwen3.6-27b | 0.0% | 0.316 (±0.632) | 0.0% | 0.0% | `05a099062cca` | `3d18dda71bc9…` |
-| gpt-oss-20b | 7.5% | 0.098 (±0.197) | 0.5% | 3.8% | `8e672b2857b2` | `3d18dda71bc9…` |
+| gemini-3.5-flash-lite | 0.0% | 0.431 (±0.863) | 0.0% | 0.0% | `605c26d89eef` **(dirty)** | `3d18dda71bc9…` |
+| gpt-oss-120b | 0.0% | 0.072 (±0.144) | 0.0% | 0.0% | `bbf73e1a308e` **(dirty)** | `3d18dda71bc9…` |
+| qwen3.6-27b | 0.0% | 0.316 (±0.632) | 0.0% | 0.0% | `05a099062cca` **(dirty)** | `3d18dda71bc9…` |
+| gpt-oss-20b | 7.5% | 0.098 (±0.197) | 0.5% | 3.8% | `8e672b2857b2` **(dirty)** | `3d18dda71bc9…` |
+
+> **These rows were not all measured by the same code.** 5 distinct git sha(s) across 5 run(s); dirty working tree for gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b. A dirty tree means the recorded sha is a lower bound, not the code that ran.
+> Before reading a cross-model delta off this table, check that no run predates
+> a change to the parsing, request, or scoring path - and re-run the ones that do.
 
 > **How to read this.** Absolute scores mean nothing; only deltas between models do.
 > If two models' COMET scores differ by less than 2× the chrF++ stdev (tie threshold

@@ -109,11 +109,30 @@ def main():
         identical = pct(var.get("identicalOutputRate"))
         stdev = var.get("chrf2_stdev")
         tie = f"{num(stdev, 3)} (±{num(stdev * 2, 3)})" if stdev is not None else "—"
-        sha = (c.get("git") or {}).get("sha", "?")[:12]
+        git = c.get("git") or {}
+        sha = (git.get("sha") or "?")[:12]
+        # A dirty tree means the sha names a commit the run did not actually use. Marked
+        # here, not only in each run's own report.md, because this is the table that puts
+        # models side by side - and comparing two rows is exactly when "which code
+        # measured this" stops being a footnote.
+        sha_cell = f"`{sha}`" + (" **(dirty)**" if git.get("dirty") else "")
         phash = (c.get("promptHash") or "?")[:12]
-        lines.append(f"| {name} | {identical} | {tie} | {pct(op.get('failureRate'))} | {pct(op.get('retryRate'))} | `{sha}` | `{phash}…` |")
+        lines.append(f"| {name} | {identical} | {tie} | {pct(op.get('failureRate'))} | {pct(op.get('retryRate'))} | {sha_cell} | `{phash}…` |")
 
+    shas = {((r.get("config") or {}).get("git") or {}).get("sha") for r in runs}
+    dirty = sorted((r.get("config") or {}).get("name", "?") for r in runs
+                   if ((r.get("config") or {}).get("git") or {}).get("dirty"))
     lines.append("")
+    if len(shas) > 1 or dirty:
+        # The rows above are only comparable if the same harness measured them. They often
+        # were not: a parser fix or a routing change between two runs moves the compliance
+        # and latency columns without the model changing at all.
+        lines.append("> **These rows were not all measured by the same code.** "
+                     f"{len(shas)} distinct git sha(s) across {len(runs)} run(s)"
+                     + (f"; dirty working tree for {', '.join(dirty)}" if dirty else "")
+                     + ". A dirty tree means the recorded sha is a lower bound, not the code that ran.")
+        lines.append("> Before reading a cross-model delta off this table, check that no run predates")
+        lines.append("> a change to the parsing, request, or scoring path - and re-run the ones that do.\n")
     lines.append("> **How to read this.** Absolute scores mean nothing; only deltas between models do.")
     lines.append("> If two models' COMET scores differ by less than 2× the chrF++ stdev (tie threshold")
     lines.append("> column above), treat them as tied - that's the noise floor from re-running the same")
