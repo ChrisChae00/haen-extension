@@ -1,0 +1,24 @@
+{
+  "name": "qwen3-14b-local-nothink",
+  "harness": "haen",
+  "provider": "ollama",
+  "modelId": "qwen3:14b",
+  "apiKeyEnv": null,
+
+  "uiLanguage": "ko",
+  "temperature": 0,
+  "jsonMode": true,
+  "stream": true,
+  "reasoningEffort": "none",
+
+  "datasetVersion": "v1",
+  "datasets": ["flores.jsonl", "handbuilt.jsonl"],
+  "limit": 212,
+
+  "runs": 1,
+  "concurrency": 1,
+
+  "judgeModelId": "anthropic/claude-sonnet-5",
+  "judgeProvider": "openrouter",
+  "judgeApiKeyEnv": "OPENROUTER_API_KEY"
+}

@@ -116,6 +116,10 @@ export function makeHaenProvider(config, api = new TranslatorAPI()) {
           // OpenRouter only. Pins which backend serves the model so latency/TTFB measure
           // one serving stack; unpinned, the cheapest route wins and it is often 10x slower.
           ...(config.providerRouting ? { providerRouting: config.providerRouting } : {}),
+          // Thinking budget. Unset leaves the model's default; "none" disables reasoning
+          // on backends that honour it. Changes what the model does, not just how it is
+          // routed, so a run that sets it is a different measurement, not a faster one.
+          ...(config.reasoningEffort ? { reasoningEffort: config.reasoningEffort } : {}),
           onRaw,
           // If config.stream is true, pass a dummy onChunk to measure streaming TTFB
           ...(config.stream ? { onChunk: () => {} } : {}),

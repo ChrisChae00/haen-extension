@@ -215,14 +215,14 @@ export class TranslatorAPI {
   // measured result, not just an error). maxTokens exists because some providers (Groq)
   // bill their free-tier token budget against the requested ceiling rather than actual
   // usage, so the harness needs to lower it without changing what the extension sends.
-  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, maxTokens = DEFAULT_MAX_TOKENS, providerRouting, systemPromptOverride, onRaw, onChunk, signal } = {}) {
+  async translate(text, { apiKey, uiLanguage = 'ko', direction = 'auto', modelKey = DEFAULT_MODEL_KEY, provider: providerOverride, modelId, temperature = 0.3, jsonMode, maxTokens = DEFAULT_MAX_TOKENS, providerRouting, reasoningEffort, systemPromptOverride, onRaw, onChunk, signal } = {}) {
     const provider = providerOverride ?? detectProvider(apiKey, modelKey);
     const model = modelId
       ?? MODEL_IDS[provider]?.[modelKey]
       ?? MODEL_IDS[provider]?.[PROVIDER_DEFAULT_MODEL_KEY[provider]];
     const useJsonMode = jsonMode ?? !NO_JSON_MODE.has(modelKey);
 
-    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens, providerRouting, useJsonMode, systemPromptOverride, onRaw, onChunk, signal };
+    const params = { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens, providerRouting, reasoningEffort, useJsonMode, systemPromptOverride, onRaw, onChunk, signal };
 
     try {
       return await this._translateWithRetry(text, params);
@@ -255,7 +255,7 @@ export class TranslatorAPI {
     throw lastError;
   }
 
-  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens = DEFAULT_MAX_TOKENS, providerRouting, useJsonMode, systemPromptOverride, onRaw, onChunk, signal }) {
+  async _translate(text, { apiKey, uiLanguage, direction, model, modelKey, provider, temperature, maxTokens = DEFAULT_MAX_TOKENS, providerRouting, reasoningEffort, useJsonMode, systemPromptOverride, onRaw, onChunk, signal }) {
     const systemPrompt = systemPromptOverride ?? buildSystemPrompt(uiLanguage, direction);
     const useStream = typeof onChunk === 'function';
     const startedAt = performance.now();
@@ -294,6 +294,11 @@ export class TranslatorAPI {
           // latency column as if it were a property of the model. Pinning the backend
           // makes the serving stack a recorded constant instead of a hidden variable.
           ...(provider === 'openrouter' && providerRouting ? { provider: providerRouting } : {}),
+          // Benchmark-only. Reasoning models spend most of their wall clock thinking:
+          // qwen3:14b measured ~30s of the ~47s per item there, with prefill at 3.4s.
+          // "none" turns it off where the backend honours it (Ollama does), which is the
+          // only lever that touches the one axis the local model actually loses on.
+          ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           stream: useStream,
           // OpenAI-compatible streaming omits `usage` unless asked; without it every
           // streamed call would report zero tokens and a $0 cost.
