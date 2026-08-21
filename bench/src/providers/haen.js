@@ -170,9 +170,20 @@ export function makeHaenProvider(config, api = new TranslatorAPI()) {
       hypothesis: typeof parsed?.natural === 'string' ? parsed.natural : '',
       raw,
       parsed,
+      // reasoning_tokens is not in the OpenAI usage schema, and providers that serve
+      // thinking models disagree about where those tokens go. Google reports a
+      // total_tokens that exceeds prompt + completion (753 + 319 but 1394 total on
+      // gemini-3.7-flash, with the missing 322 visible as thoughtsTokenCount only on
+      // the native endpoint), so billing them off completion_tokens alone understates
+      // the cost of a reasoning model by roughly half. Derive the gap instead of
+      // trusting either field: it is zero for models that do not hide thinking.
       usage: usage ? {
         prompt_tokens: usage.prompt_tokens ?? 0,
         completion_tokens: usage.completion_tokens ?? 0,
+        reasoning_tokens: Math.max(
+          0,
+          (usage.total_tokens ?? 0) - (usage.prompt_tokens ?? 0) - (usage.completion_tokens ?? 0),
+        ),
       } : null,
       latencyMs,
       ttfbMs: meta.ttfbMs,

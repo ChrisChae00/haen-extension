@@ -23,6 +23,10 @@ export const PRICING = {
   // gemini-3.6-flash is on introductory pricing through 2026-12-31; it reverts to
   // 1.50 / 7.50 on 2027-01-01. Re-check this row then, or a cost report dated after
   // the new year silently halves it.
+  // gemini-3.7-flash shares 3.6's introductory pricing and the same 2027-01-01 cliff.
+  // Thinking tokens bill as output, so a reasoning-heavy run costs several times what
+  // the completion length suggests - qwen3.6-27b averaged 3,502 completion tokens.
+  'gemini-3.7-flash':         { inputPer1M: 0.75,  outputPer1M: 3.75, fetchedAt: '2026-08-21' },
   'gemini-3.6-flash':         { inputPer1M: 0.75,  outputPer1M: 3.75, fetchedAt: '2026-08-18' },
   'gemini-3.5-flash':         { inputPer1M: 1.50,  outputPer1M: 9.00, fetchedAt: '2026-08-18' },
   'gemini-3.5-flash-lite':    { inputPer1M: 0.30,  outputPer1M: 2.50, fetchedAt: '2026-08-18' },

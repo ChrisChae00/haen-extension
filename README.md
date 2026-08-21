@@ -30,13 +30,18 @@ Built with a focus on performance, reliability, and user experience, Haen showca
   that scores every model Haen can call on COMET, chrF++, 15-rule compliance, latency, streaming TTFB and
   cost — pinning the git SHA, dataset checksums and a system-prompt hash to each result, and flagging runs
   measured on a dirty tree so the cross-model table can't silently compare two different harnesses.
-  Across five models the COMET confidence intervals **all overlap (0.8857–0.8924)**: quality does not
+  Across six models the COMET confidence intervals **all overlap (0.8849–0.8932)**: quality does not
   separate them, so the harness reports what does. A local `qwen3:14b` (Q4) holds **100% on all 15 rules at
-  $0**, at 27× the latency of the fastest hosted model — while `qwen3.6-27b`, statistically tied on COMET,
-  prefixes 46% of its answers with prose the schema forbids. See [`bench/REPORT.md`](bench/REPORT.md).
+  $0** — while `qwen3.6-27b`, statistically tied on COMET, prefixes 46% of its answers with prose the schema
+  forbids. See [`bench/REPORT.md`](bench/REPORT.md).
+- **Latency work driven by measurement, not guesswork**: Splitting the local model's wall clock into
+  prefill / thinking / decode showed thinking was **24s of a 43s median** and the 1,365-token prompt was
+  worth at most 3s. Disabling reasoning cut **latency p50 40.1s → 16.2s and streaming TTFB 25.1s → 0.53s
+  (47×)** with no COMET regression (0.8849 → 0.8861, overlapping CIs) — paid for with judge-scored `tip`
+  groundedness, which is now the fine-tuning target rather than a serving default.
 - **Fast Test Suite**: Zero-dependency `node --test` suite covering the 15 schema and Hanja compliance rules
   plus reasoning-model output parsing, pool pacing, and the key-rotation / run-stop logic that decides
-  whether a benchmark keeps recording — **34 tests in ~150ms**.
+  whether a benchmark keeps recording — **36 tests in ~150ms**.
 
 ---
 

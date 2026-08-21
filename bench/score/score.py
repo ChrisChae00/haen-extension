@@ -149,6 +149,10 @@ def operational(records, config, pricing):
     ttfb = sorted(r["ttfbMs"] for r in records if r.get("ttfbMs") is not None)
     prompt_toks = sum((r.get("usage") or {}).get("prompt_tokens", 0) for r in records)
     completion_toks = sum((r.get("usage") or {}).get("completion_tokens", 0) for r in records)
+    # Thinking tokens bill as output. Providers that hide them from completion_tokens
+    # (Google does; Groq does not) would otherwise report a reasoning model at half its
+    # real cost. Older runs have no such field and read as 0, which is correct for them.
+    reasoning_toks = sum((r.get("usage") or {}).get("reasoning_tokens", 0) for r in records)
     n = len(records)
 
     errors = defaultdict(int)
@@ -164,7 +168,7 @@ def operational(records, config, pricing):
     if config.get("provider") == "ollama":
         cost_per_1k = 0.0
     elif price and n and (prompt_toks or completion_toks):
-        per_item = (prompt_toks / n / 1e6) * price["inputPer1M"] + (completion_toks / n / 1e6) * price["outputPer1M"]
+        per_item = (prompt_toks / n / 1e6) * price["inputPer1M"] + ((completion_toks + reasoning_toks) / n / 1e6) * price["outputPer1M"]
         cost_per_1k = round(per_item * 1000, 4)
 
     return {
@@ -175,6 +179,12 @@ def operational(records, config, pricing):
             "completionTotal": completion_toks,
             "promptMean": round(prompt_toks / n, 1) if n else None,
             "completionMean": round(completion_toks / n, 1) if n else None,
+            # Hidden thinking tokens, derived from the total the provider reports. Zero
+            # for non-reasoning models and for providers that already fold them into
+            # completion_tokens, so a non-zero value means "this model thinks and bills
+            # for it where you cannot see it".
+            "reasoningTotal": reasoning_toks,
+            "reasoningMean": round(reasoning_toks / n, 1) if n else None,
         },
         "costPer1kTranslations": cost_per_1k,
         "pricesFetchedAt": price["fetchedAt"] if price else ("n/a (local)" if config.get("provider") == "ollama" else None),

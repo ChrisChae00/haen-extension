@@ -89,3 +89,27 @@ test('a rate limit on the last key ends the run rather than failing every remain
   );
   await assert.rejects(() => translate(item), AllKeysExhausted);
 });
+
+// Usage arrives through onRaw, the same callback the harness uses to capture the raw
+// body. A stand-in that reports one response with the usage the provider sent.
+const apiReporting = usage => ({
+  async translate(text, opts) {
+    const raw = JSON.stringify({ natural: 'hi', nuance: 'n', alternatives: [] });
+    opts.onRaw?.(raw, usage, { ttfbMs: 10 });
+    return JSON.parse(raw);
+  },
+});
+
+test('hidden thinking tokens are derived from the reported total', async () => {
+  // Google's OpenAI-compatible endpoint reports a total that exceeds prompt +
+  // completion for reasoning models; the gap is thinking, and it bills as output.
+  const translate = makeHaenProvider(CONFIG, apiReporting({ prompt_tokens: 753, completion_tokens: 319, total_tokens: 1394 }));
+  const record = await translate(item);
+  assert.equal(record.usage.reasoning_tokens, 322);
+});
+
+test('models that hide nothing report zero reasoning tokens', async () => {
+  const translate = makeHaenProvider(CONFIG, apiReporting({ prompt_tokens: 23, completion_tokens: 451, total_tokens: 474 }));
+  const record = await translate(item);
+  assert.equal(record.usage.reasoning_tokens, 0);
+});
