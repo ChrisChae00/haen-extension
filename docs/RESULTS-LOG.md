@@ -21,11 +21,11 @@ Haen — 한영 문화 뉘앙스 설명 크롬 확장. 응답이 4필드 JSON(`n
 
 | 항목 | 값 |
 |---|---|
-| 측정 모델 | 6 (gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b, qwen3:14b 로컬 think/no-think) |
+| 측정 모델 | 7 (gemini-3.7-flash, gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b, qwen3:14b 로컬 think/no-think) |
 | 데이터셋 | 212문항 (FLORES-200 devtest 200 + 직접 작성 12), 양방향 |
-| 총 API 호출 | 2,400+ (모델당 212×1~3 runs) |
+| 총 API 호출 | 2,800+ (모델당 212×1~3 runs) |
 | 측정 축 | COMET · chrF++ · BLEU · 15룰 compliance · latency/TTFB 백분위 · 토큰당 비용 · LLM-as-judge 4기준 |
-| 유료 측정 총비용 | ~$6.6 (OpenRouter $6.3 + Google AI Studio) |
+| 유료 측정 총비용 | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
 | 하네스 테스트 | 36 passing (~150ms, 의존성 0) |
 
 ---
@@ -49,8 +49,9 @@ thinking 예산을 실측으로 분해해 병목을 특정하고 제거.
 
 ### 2. "번역 품질은 모델 크기가 지배한다"는 가정을 반증
 
-14B부터 120B까지 **5개 모델 COMET 신뢰구간 전부 중첩** (0.8849~0.8932, 폭 0.008, n=212).
-모델 선택이 이 태스크의 번역 품질을 좌우하지 않음을 통계로 확인.
+14B부터 120B까지 **6개 모델 COMET 신뢰구간 전부 중첩** (0.8849~0.8932, 폭 0.008, n=212).
+모델 선택이 이 태스크의 번역 품질을 좌우하지 않음을 통계로 확인. 세대 차이는 갈랐다 —
+`gemini-3.7-flash`가 0.8962(0.890–0.902)로 이 겹침 구간에서 처음 분리된 모델이다.
 
 대신 갈린 축은 **구조화 출력 안정성**과 **설명의 근거성**:
 - gpt-oss-20b vs 120b: COMET 동률이나 `jsonValid` 97.6% vs 100%, `altsExactlyTwo` 96.2% vs 100%
