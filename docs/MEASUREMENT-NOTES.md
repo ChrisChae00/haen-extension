@@ -1,165 +1,180 @@
-# 하네스 측정 정확도 메모
+# Harness measurement-accuracy notes
 
-로컬 전용 문서 (`.gitignore`에 등록됨). 커밋하지 말 것.
+Written 2026-08-18. Subject: the `bench/` harness, base commit `7977a87`.
 
-작성: 2026-08-18. 대상: `bench/` 하네스, base commit `7977a87`.
+## Why this document exists
 
-## 왜 이 문서가 있나
+The bugs written up here are **the kind tests do not catch**. The harness exits cleanly,
+predictions.jsonl is written normally, and the report renders nicely. Only the numbers are wrong —
+and not as "obviously strange values" but as "plausible but biased values".
 
-여기 적힌 버그들은 **테스트로 안 잡히는 종류**다. 하네스는 정상 종료하고, predictions.jsonl은
-정상적으로 쓰이고, 리포트도 예쁘게 렌더된다. 틀린 건 숫자뿐이다. 그것도 "명백히 이상한 값"이
-아니라 "그럴듯하지만 편향된 값"으로 나온다.
+Later, reading the code alone cannot reconstruct why they were fixed that way. So the symptom, the
+impact, the chosen solution, and the rejected alternatives are recorded.
 
-이런 건 나중에 코드만 봐서는 왜 그렇게 고쳤는지 복원이 안 된다. 그래서 증상·영향·고른 해법·
-버린 대안을 남긴다.
-
-발견 경위: 첫 3모델 실측(gemini 212×2, llama 15×2, qwen 55×1)을 끝내고 `bench/REPORT.md`를
-낸 직후 `/code-review`를 돌림. 8건이 나왔고 그중 측정값 자체를 왜곡하는 4건이 아래.
-
----
-
-## 1. 스트리밍 실패가 조용히 비스트리밍 재요청이 됨
-
-**어디** `src/apiClient.js:204`
-
-**증상** 스트림 body가 `InvalidResponseError`(잘리거나 깨진 JSON — 스트리밍의 흔한 실패)로
-깨지면, `translate()`가 `onChunk: undefined`로 요청을 통째로 다시 보낸다. 그 재요청의 `onRaw`가
-`meta = { ttfbMs: null }`을 들고 두 번째로 발화하면서 하네스가 붙잡고 있던 첫 스트리밍 meta를
-덮어쓴다.
-
-**어떤 수치가 어떻게 틀어지나**
-
-- `ttfbMs`가 `null`이 되어 `score.py:149`의 `r.get("ttfbMs") is not None` 필터에서 탈락 →
-  **스트리밍이 실제로 문제였던 아이템만 TTFB 백분위에서 빠진다.** 남은 표본은 "스트리밍이
-  잘 된 경우"뿐인 생존자 편향 집합이고, 리포트는 그걸 "streaming TTFB p50/p90/p99"라고 부른다
-- `raw`도 두 번째(비스트리밍) 응답으로 덮이므로 **compliance는 비스트리밍 경로를 채점**한다.
-  스트리밍 파싱을 측정한다고 해놓고 실제로는 폴백 경로의 품질을 재는 셈
-- `retries`는 1로 잡히지만, 그 1이 "429 재시도"인지 "스트림 폴백"인지 구분되지 않는다
-
-세 config 전부 `"stream": true`이므로 전부 해당된다.
-
-**고른 해법 — 없애지 않고 발생률을 측정해서 노출**
-
-`src/apiClient.js`는 건드리지 않는다. 하네스(`bench/src/providers/haen.js`)의 `onRaw`가
-첫 non-null `ttfbMs`를 보존하고, 덮어쓰기가 일어났다는 사실을 `streamFallback: true`로 기록한다.
-`score.py`가 `streamFallbackRate`로 집계해 모델별 `report.md`에 항상 출력한다(0%여도 출력 —
-0%라는 사실 자체가 "TTFB 통계가 깨끗하다"는 근거다).
-
-**왜 apiClient를 고치지 않았나**
-
-이 폴백은 버그가 아니라 **의도된 프로덕션 동작**이다. 사용자는 스트림이 깨졌을 때 에러 대신
-한 번 더 시도해서 온전한 응답을 받는다. 벤치의 존재 이유가 "사용자가 실제로 타는 코드 경로를
-측정한다"는 것(`bench/src/providers/haen.js` 상단 주석)이므로, 측정 편의를 위해 그 경로를 끄면
-측정 대상이 사용자의 것과 달라진다. 그건 더 나쁜 종류의 부정확이다.
-
-**버린 대안**
-
-- *apiClient에 `disableNonStreamFallback` 옵션 추가* — 프로덕션 코드에 벤치 전용 분기가 생긴다.
-  측정은 깨끗해지지만 위 이유로 측정 대상이 어긋난다
-- *폴백된 아이템을 통계에서 그냥 제외* — 지금 상태(암묵적 제외)와 같고, 편향을 숨긴다.
-  드러내는 게 목적이므로 정반대
+How they were found: right after finishing the first three model measurements (gemini 212×2,
+llama 15×2, qwen 55×1) and publishing `bench/REPORT.md`, `/code-review` was run over the harness.
+It produced 8 findings; the 4 below are the ones that distort the measurements themselves.
 
 ---
 
-## 2. 키 로테이션 대기가 latency에 섞임
+## 1. A streaming failure silently becomes a non-streaming re-request
 
-**어디** `bench/src/providers/haen.js:42`
+**Where** `src/apiClient.js:204`
 
-**증상** `const started = performance.now()`가 키 로테이션 `for(;;)` 루프 **밖**에 있다.
-키가 quota 소진으로 죽어 다음 키로 넘어가면, 죽은 키에 대한 요청 + apiClient 내부 재시도
-백오프(`e.retryAfterMs`, 없으면 500ms + 1500ms)까지 전부 `latencyMs`에 합산된다.
+**Symptom** When the stream body breaks with `InvalidResponseError` (truncated or malformed JSON —
+a common streaming failure), `translate()` re-sends the entire request with `onChunk: undefined`.
+That re-request's `onRaw` fires a second time carrying `meta = { ttfbMs: null }`, overwriting the
+first streaming meta the harness was holding.
 
-**어떤 수치가 어떻게 틀어지나** 로테이션이 일어난 아이템 몇 개가 수 초~수십 초짜리 표본이 되어
-p90/p99를 통째로 끌어올린다. 리포트의 latency 꼬리는 "모델이 느렸다"로 읽히지만 실제로는
-"하네스가 죽은 키를 하나 태웠다"는 뜻이다.
+**Which numbers go wrong, and how**
 
-**고른 해법** `started`를 루프 안 `try` 첫 줄로 옮긴다. 성공한 키의 요청만 계측한다.
+- `ttfbMs` becomes `null` and is dropped by the `r.get("ttfbMs") is not None` filter at
+  `score.py:149` → **exactly the items where streaming was actually a problem fall out of the TTFB
+  percentiles.** The remaining sample is a survivorship-biased set of "cases where streaming went
+  well", and the report calls it "streaming TTFB p50/p90/p99"
+- `raw` is also overwritten by the second (non-streaming) response, so **compliance scores the
+  non-streaming path**. It claims to measure streaming parsing while actually measuring the quality
+  of the fallback path
+- `retries` is counted as 1, but that 1 does not distinguish "429 retry" from "stream fallback"
 
-**왜 이게 맞나** latency 컬럼의 정의는 "사용자가 겪는 지연"이다. 사용자는 키를 하나만 갖고
-있고, 여러 계정을 돌려가며 quota를 이어붙이는 건 순수하게 하네스 사정이다. 로테이션 시간을
-포함시키면 사용자가 절대 겪지 않는 지연을 사용자 지표라고 부르게 된다.
+All three configs have `"stream": true`, so all are affected.
 
-버려진 시도가 있었다는 사실 자체는 `retries`(= `attempts - 1`)에 남으므로 정보가 사라지지 않는다.
+**Chosen solution — do not remove it; measure its rate and expose it**
 
----
+`src/apiClient.js` is left alone. The harness's `onRaw` (`bench/src/providers/haen.js`) preserves
+the first non-null `ttfbMs` and records the fact that an overwrite happened as
+`streamFallback: true`. `score.py` aggregates it as `streamFallbackRate` and always prints it in
+each model's `report.md` (printed even at 0% — the fact that it is 0% is itself the evidence that
+the TTFB statistics are clean).
 
-## 3. `minIntervalMs`는 rate limiter가 아니다
+**Why apiClient was not fixed**
 
-**어디** `bench/src/run.js:76` (`mapPool`)
+This fallback is not a bug; it is **intended production behaviour**. When a stream breaks, the user
+gets one more attempt and a complete response rather than an error. The whole reason the benchmark
+exists is that it "measures the code path users actually take" (comment at the top of
+`bench/src/providers/haen.js`), so turning that path off for measurement convenience would make the
+thing measured differ from the user's. That is a worse kind of inaccuracy.
 
-**증상** sleep이 아이템 **완료 후**에 걸린다. 따라서 실효 RPM은
-`concurrency / (latency + minIntervalMs)`이지 `60000 / minIntervalMs`가 아니다.
-`concurrency: 2`, latency 1초, `minIntervalMs: 4200`이면 초당 요청이 의도의 두 배가 된다.
+**Rejected alternatives**
 
-부수적으로 워커가 마지막 아이템을 끝낸 뒤에도 한 번 자므로, run마다
-`concurrency × minIntervalMs`만큼 아무 일도 안 하고 버린다.
-
-**어떤 수치가 어떻게 틀어지나** 지금은 틀어지지 않았다 —
-`bench/configs/gemini-3.5-flash-lite.json`이 `concurrency: 1`이라 **우연히** 맞다.
-문제는 그 가정이 코드 어디에도 안 박혀 있다는 것. 누가 처리량을 올리려고 concurrency를 2로
-바꾸면 조용히 Google의 15 RPM 캡을 넘겨서, 측정 대신 429 폭풍을 얻는다.
-
-**고른 해법** 두 줄짜리 수정:
-- 워커의 마지막 아이템 뒤에는 자지 않는다
-- `minIntervalMs`가 설정됐는데 `concurrency > 1`이면 **에러로 죽인다**
-
-**왜 진짜 rate limiter를 안 만들었나** 토큰버킷/슬라이딩윈도우는 이 워크로드에 과하다.
-지금 페이싱이 필요한 provider는 하나(Google 무료 티어)고, 그 하나는 `concurrency: 1`로 충분히
-측정된다(424 요청 실패 0으로 검증됨). 가정을 코드에 명시하는 가드가 같은 안전성을 두 줄로 준다.
-다중 워커 페이싱이 실제로 필요해지는 날 rate limiter로 승격하면 된다 — 그때 필요한 게
-무엇인지도 그때 더 정확히 안다.
+- *Add a `disableNonStreamFallback` option to apiClient* — puts a bench-only branch into production
+  code. The measurement gets clean, but for the reason above the thing measured drifts
+- *Just exclude fallen-back items from the statistics* — identical to the current state (implicit
+  exclusion) and hides the bias. The goal is to expose it, so this is the exact opposite
 
 ---
 
-## 4. `fetchedAt` 하나만 날짜가 다름
+## 2. Key-rotation wait mixed into latency
 
-**어디** `bench/src/pricing.js:13` — `llama-3.1-8b-instant`만 `'2026-08-05'`, 나머지 Groq 행은
-전부 `'2026-08-09'`.
+**Where** `bench/src/providers/haen.js:42`
 
-**증상** `fetchedAt`은 장식이 아니라 리포트의 "prices as of" 근거다(`score.py:180` → report.md).
-날짜가 하나만 뒤처져 있으면 둘 중 하나다: (a) 재검증했는데 날짜를 안 올렸거나,
-(b) 재검증 안 했고 나머지 행들의 날짜 갱신도 같은 수준으로 미덥지 않거나.
+**Symptom** `const started = performance.now()` sits **outside** the key-rotation `for(;;)` loop.
+When a key dies of quota exhaustion and the next one is taken, the request against the dead key plus
+apiClient's internal retry backoff (`e.retryAfterMs`, or 500ms + 1500ms without it) all get summed
+into `latencyMs`.
 
-**규칙** — 앞으로 이 표를 만질 때:
+**Which numbers go wrong, and how** The few items where rotation occurred become samples of seconds
+to tens of seconds and drag p90/p99 up wholesale. The latency tail in the report reads as "the model
+was slow" but actually means "the harness burned through a dead key".
 
-> `fetchedAt`은 **실제로 provider 문서에서 그 값을 눈으로 확인한 날**만 적는다.
-> 확인 못 했으면 값도 날짜도 건드리지 않는다. "다른 행들과 맞추려고" 날짜를 올리는 순간
-> 이 필드는 거짓말이 되고, 그러면 이 필드가 있는 의미가 없다.
+**Chosen solution** Move `started` to the first line of the `try` inside the loop. Only the request
+on the successful key is instrumented.
 
-`llama-3.1-8b-instant`는 현재 어떤 config도 쓰지 않으므로 급하지 않다. 확인 가능할 때 확인하고,
-안 되면 오래된 날짜를 그대로 두는 게 맞다 — 오래된 날짜는 정보고, 틀린 날짜는 오염이다.
+**Why this is right** The definition of the latency column is "the delay a user experiences". A user
+has exactly one key; stitching quota together across multiple accounts is purely a harness
+circumstance. Including rotation time means calling a delay no user will ever experience a user
+metric.
+
+The fact that discarded attempts happened is still preserved in `retries` (= `attempts - 1`), so no
+information is lost.
 
 ---
 
-## 이미 낸 수치에 대한 영향
+## 3. `minIntervalMs` is not a rate limiter
 
-`bench/REPORT.md`(2026-08-18 기준)의 gemini/llama 행은 **위 수정 이전 하네스로 측정된 것**이다.
+**Where** `bench/src/run.js:76` (`mapPool`)
 
-| 지표 | 영향 |
+**Symptom** The sleep is applied **after an item completes**. So the effective RPM is
+`concurrency / (latency + minIntervalMs)`, not `60000 / minIntervalMs`. With `concurrency: 2`,
+1s latency and `minIntervalMs: 4200`, requests per second come out at twice the intent.
+
+Incidentally, a worker also sleeps once after finishing its last item, so every run throws away
+`concurrency × minIntervalMs` doing nothing.
+
+**Which numbers go wrong, and how** Right now, nothing is wrong —
+`bench/configs/gemini-3.5-flash-lite.json` has `concurrency: 1`, so it is **accidentally** correct.
+The problem is that the assumption is nowhere in the code. Anyone raising concurrency to 2 for
+throughput would quietly blow past Google's 15 RPM cap and get a storm of 429s instead of
+measurements.
+
+**Chosen solution** A two-line fix:
+- do not sleep after a worker's last item
+- if `minIntervalMs` is set and `concurrency > 1`, **die with an error**
+
+**Why a real rate limiter was not built** A token bucket or sliding window is overkill for this
+workload. Exactly one provider needs pacing today (the Google free tier), and that one is measured
+perfectly well at `concurrency: 1` (verified over 424 requests with 0 failures). A guard that states
+the assumption in code gives the same safety in two lines. The day multi-worker pacing is genuinely
+needed, it can be promoted to a rate limiter — and by then what it needs to do will be clearer too.
+
+---
+
+## 4. One `fetchedAt` has a different date
+
+**Where** `bench/src/pricing.js:13` — only `llama-3.1-8b-instant` is `'2026-08-05'`; all other Groq
+rows are `'2026-08-09'`.
+
+**Symptom** `fetchedAt` is not decoration; it is the basis for the report's "prices as of" line
+(`score.py:180` → report.md). A single lagging date means one of two things: (a) it was re-verified
+and the date was not bumped, or (b) it was not re-verified, and the date updates on the other rows
+are just as untrustworthy.
+
+**Rule** — going forward, when touching this table:
+
+> Write into `fetchedAt` only **the day the value was actually seen with your own eyes in the
+> provider's documentation**. If it could not be checked, touch neither the value nor the date. The
+> moment a date is bumped "to match the other rows", the field becomes a lie, and then there is no
+> point having it.
+
+`llama-3.1-8b-instant` is not used by any config today, so this is not urgent. Verify it when it can
+be verified; otherwise leaving the old date is the right thing — an old date is information, a wrong
+date is contamination.
+
+---
+
+## Impact on numbers already published
+
+The gemini and llama rows in `bench/REPORT.md` (as of 2026-08-18) were **measured with the harness
+before these fixes**.
+
+| Metric | Impact |
 |---|---|
-| COMET / chrF++ / BLEU | 영향 없음 — 번역 품질 계산은 이 버그들과 무관 |
-| compliance 비율 | 폴백이 일어난 아이템만큼 비스트리밍 경로를 채점함. 발생률을 몰라서 크기를 모름 |
-| streaming TTFB p50/p90/p99 | **생존자 편향.** 폴백된 아이템이 통째로 빠져 있음 |
-| latency p90/p99 | 키 로테이션이 일어났다면 부풀려짐. 단일 키 run이면 영향 없음 |
-| cost / 1k | 영향 없음 |
-| determinism | 영향 없음 |
+| COMET / chrF++ / BLEU | None — translation-quality computation is unrelated to these bugs |
+| Compliance rates | Scores the non-streaming path for however many items fell back. Rate unknown, so magnitude unknown |
+| Streaming TTFB p50/p90/p99 | **Survivorship bias.** Fallen-back items are missing entirely |
+| latency p90/p99 | Inflated if key rotation occurred. No impact on single-key runs |
+| cost / 1k | None |
+| determinism | None |
 
-`streamFallbackRate`가 없던 시절 데이터라 편향의 **크기를 사후에 알 수 없다**. 그래서 재측정한다.
-재측정 후 이 비율이 0%로 나오면, 옛 수치도 실은 깨끗했다는 뜻이 된다.
+Since the data predates `streamFallbackRate`, **the magnitude of the bias cannot be established
+after the fact**. Hence the re-measurement. If that rate comes out at 0%, it means the old numbers
+were clean after all.
 
 ---
 
-## 관련 미해결 건 (이번 스코프 밖)
+## Related open issue (out of scope here)
 
-**스트림 body 읽기에 타임아웃이 없음** — `src/apiClient.js:235`의 30초 타임아웃은 fetch 헤더까지만
-커버하고 `:275`에서 `clearTimeout` 된다. 그 뒤 `_handleStream()`의 `reader.read()`에는 어떤
-타임아웃도 없어서, 소켓이 조용히 죽으면 resolve도 reject도 되지 않는다.
+**No timeout on reading the stream body** — the 30-second timeout at `src/apiClient.js:235` only
+covers the fetch up to headers and is `clearTimeout`-ed at `:275`. After that, `reader.read()` in
+`_handleStream()` has no timeout at all, so if the socket dies quietly it neither resolves nor
+rejects.
 
-- 하네스에서: 돌고 있는 run을 `kill -STOP` → `kill -CONT` 하면 프로세스가 영구 hang
-  (4시간 방치 관측: 소켓 0, 진행 0, CPU 24초). **run을 멈춰야 하면 `kill -9`만 쓸 것**
-- 실사용에서: 번역 스트리밍 중 네트워크가 끊기면 UI가 영원히 로딩 상태로 멈춘다. 진짜 버그이고
-  하네스가 아니라 프로덕션 문제다. 별건으로 다뤄야 함
+- In the harness: `kill -STOP` then `kill -CONT` on a running run hangs the process permanently
+  (observed after 4 hours: 0 sockets, 0 progress, 24s CPU). **To stop a run, use `kill -9` only**
+- In real use: if the network drops mid-stream, the UI is stuck loading forever. A real bug, and a
+  production one rather than a harness one. To be handled separately
 
-**`max_tokens: 2048` 고정** — `src/apiClient.js` fetch body. Groq는 실제 usage가 아니라 요청의
-`max_tokens`까지 예약해서 TPD/TPM을 차감하므로, 실제 완료 토큰이 ~300인데 예약은 ~2,800이 잡힌다.
-무료 티어 TPD 200,000이 하루 ~71 calls로 쪼그라드는 직접 원인. 프로덕션 코드라 안 건드림.
+**`max_tokens: 2048` hardcoded** — in the `src/apiClient.js` fetch body. Groq deducts TPD/TPM
+against the request's `max_tokens` reservation rather than actual usage, so a real completion of
+~300 tokens reserves ~2,800. This is the direct cause of the 200,000 TPD free tier shrinking to
+~71 calls a day. Left alone because it is production code.

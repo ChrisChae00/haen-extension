@@ -1,123 +1,131 @@
-# 결과 기록 — 복습 · 이력서용 수치
+# Results log — review notes and resume-ready numbers
 
-로컬 전용(`docs/`는 gitignore). 커밋되는 수치는 `bench/REPORT.md`에 있고, 이 문서는
-**"무엇을 왜 했고 무엇이 나왔나"**를 나중에 다시 읽을 수 있게 정리한 것.
+The committed numbers live in `bench/REPORT.md`; this document organises
+**"what was done, why, and what came out"** so it can be re-read later.
 
-문제·해결의 상세 기록은 [ENGINEERING-LOG.md](ENGINEERING-LOG.md). 세부 인수인계는 `docs/local/`(커밋 안 함): [HANDOFF.md](local/HANDOFF.md)(측정 트랙),
-[FINETUNING.md](local/FINETUNING.md)(개선 트랙). 하네스 정확도 판단 근거는
-[MEASUREMENT-NOTES.md](MEASUREMENT-NOTES.md).
-
----
-
-## 프로젝트 한 줄
-
-Haen — 한영 문화 뉘앙스 설명 크롬 확장. 응답이 4필드 JSON(`natural`/`literal`/`nuance`/
-`alternatives`)이라 **번역 정확도만으로는 품질을 못 재는** 제품. 그래서 자체 벤치마크
-하네스를 만들어 번역 품질 · 스키마 준수 · 지연 · 비용 · LLM 판정 5축으로 측정했다.
+Detailed problem/fix records are in [ENGINEERING-LOG.md](ENGINEERING-LOG.md). Session handoffs are
+in `docs/local/` (not committed): [HANDOFF.md](local/HANDOFF.md) (measurement track),
+[FINETUNING.md](local/FINETUNING.md) (improvement track). The reasoning behind the harness-accuracy
+calls is in [MEASUREMENT-NOTES.md](MEASUREMENT-NOTES.md).
 
 ---
 
-## 규모 (2026-08-21 기준)
+## The project in one line
 
-| 항목 | 값 |
+Haen — a Chrome extension that explains KO↔EN cultural nuance. The response is a 4-field JSON
+(`natural`/`literal`/`nuance`/`alternatives`), so **translation accuracy alone cannot measure
+quality**. Hence a purpose-built benchmark harness measuring five axes: translation quality, schema
+compliance, latency, cost, and LLM judgement.
+
+---
+
+## Scale (as of 2026-08-21)
+
+| Item | Value |
 |---|---|
-| 측정 모델 | 7 (gemini-3.7-flash, gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b, qwen3:14b 로컬 think/no-think) |
-| 데이터셋 | 212문항 (FLORES-200 devtest 200 + 직접 작성 12) + judge 전용 관용구 40문항, 양방향 |
-| 총 API 호출 | 2,800+ (모델당 212×1~3 runs) |
-| 측정 축 | COMET · chrF++ · BLEU · 15룰 compliance · latency/TTFB 백분위 · 토큰당 비용 · LLM-as-judge 4기준 |
-| 유료 judge 판정 | 316건 (`claude-sonnet-5` 고정, $0.0095/건) |
-| 유료 측정 총비용 | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
-| 하네스 테스트 | 36 passing (~150ms, 의존성 0) |
+| Models measured | 7 (gemini-3.7-flash, gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b, local qwen3:14b think/no-think) |
+| Dataset | 212 items (FLORES-200 devtest 200 + 12 hand-written) + 40 judge-only idiom items, both directions |
+| Total API calls | 2,800+ (212 × 1–3 runs per model) |
+| Measurement axes | COMET · chrF++ · BLEU · 15-rule compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
+| Paid judge verdicts | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
+| Total paid measurement cost | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
+| Harness tests | 36 passing (~150ms, zero dependencies) |
 
 ---
 
-## 이력서에 쓸 수 있는 수치
+## Numbers that can go on a resume
 
-### 1. 로컬 14B 추론 지연 60% 감소, 번역 품질 손실 0
+### 1. 60% latency cut on the local 14B, zero translation-quality loss
 
-thinking 예산을 실측으로 분해해 병목을 특정하고 제거.
+Decomposed the thinking budget by measurement, identified the bottleneck, removed it.
 
-| | 이전 | 이후 |
+| | Before | After |
 |---|---|---|
 | latency p50 | 40,087 ms | **16,211 ms** (−60%) |
-| **TTFB p50** | 25,144 ms | **534 ms** (−98%, 47배) |
-| COMET | 0.8849 | 0.8861 (CI 겹침, 회귀 없음) |
-| 스키마 준수 15룰 | 100% | 99.5% |
+| **TTFB p50** | 25,144 ms | **534 ms** (−98%, 47×) |
+| COMET | 0.8849 | 0.8861 (CIs overlap, no regression) |
+| 15-rule schema compliance | 100% | 99.5% |
 
-> 방법: ollama 네이티브 타이밍 필드로 프리필/thinking/디코딩을 분리 측정 → thinking이
-> 총 지연의 59%(24s)임을 확인 → `reasoning_effort` 옵션을 클라이언트에 관통시켜 212문항
-> 전량 A/B. 프롬프트 축소는 최대 3초짜리 카드로 판명돼 폐기.
+> Method: used ollama's native timing fields to separate prefill / thinking / decode → confirmed
+> thinking was 59% (24s) of total latency → threaded the `reasoning_effort` option through the
+> client and ran a full A/B over all 212 items. Prompt shrinking turned out to be worth at most
+> 3 seconds and was dropped.
 
-### 2. "번역 품질은 모델 크기가 지배한다"는 가정을 반증
+### 2. Disproved the assumption that "model size dominates translation quality"
 
-14B부터 120B까지 **6개 모델 COMET 신뢰구간 전부 중첩** (0.8849~0.8932, 폭 0.008, n=212).
-모델 선택이 이 태스크의 번역 품질을 좌우하지 않음을 통계로 확인. 세대 차이는 갈랐다 —
-`gemini-3.7-flash`가 0.8962(0.890–0.902)로 이 겹침 구간에서 처음 분리된 모델이다.
+From 14B up to 120B, the **COMET confidence intervals of all six models overlap** (0.8849–0.8932,
+width 0.008, n=212). Statistically confirmed that model choice does not drive translation quality
+on this task. Generation did separate them — `gemini-3.7-flash` at 0.8962 (0.890–0.902) is the
+first model to break out of that overlapping band.
 
-대신 갈린 축은 **구조화 출력 안정성**과 **설명의 근거성**:
-- gpt-oss-20b vs 120b: COMET 동률이나 `jsonValid` 97.6% vs 100%, `altsExactlyTwo` 96.2% vs 100%
+What did separate models was **structured-output stability** and **groundedness of the explanation**:
+- gpt-oss-20b vs 120b: tied on COMET, but `jsonValid` 97.6% vs 100%, `altsExactlyTwo` 96.2% vs 100%
 - LLM-as-judge `nuanceGrounded`: gemini 100%, qwen3.6-27b 91.7%, gpt-oss-120b 58.3%,
-  로컬 14B 50% — **파라미터 수를 따르지 않음**(27B가 120B를 이김)
+  local 14B 50% — **does not track parameter count** (27B beats 120B)
 
-### 3. 측정 가능성 자체를 설계 — judge 표본을 검정력으로 결정
+### 3. Designed for measurability itself — judge sample size chosen by statistical power
 
-LLM-as-judge는 같은 문항을 모델마다 채점하는 **paired 비교**이므로 McNemar 정확검정이
-적용된다. discordant가 전부 한 방향일 때 p = `2 × 0.5^k`이고, 초기 표본 n=12에서는
-k=5가 p=0.0625 — **최선의 결과조차 유의수준을 못 넘는 구조**였다.
+LLM-as-judge scores the same items across models, so it is a **paired comparison** and McNemar's
+exact test applies. When all discordant pairs point one way, p = `2 × 0.5^k`; at the initial sample
+of n=12, k=5 gives p=0.0625 — **a structure where even the best possible result cannot clear the
+significance threshold**.
 
-표본을 12 → 52로 키우면서 추가 문항을 **관용구로 구성**했다: 직역이 명백히 틀리는 문장이라
-`literal`과 `nuance` 필드가 반드시 일해야 정답이 된다. 양방향 × casual/business 각 10문항.
+While growing the sample from 12 → 52, the added items were **built from idioms**: sentences where
+a literal translation is obviously wrong, so the `literal` and `nuance` fields have to do real work
+to be correct. Both directions × 10 items each for casual/business.
 
-효과 검증: 교사 후보의 `nuanceGrounded`가 n=12에서 75%로 애매했는데 n=40에서 **95%**로
-확정됐다 — 12문항짜리 판단은 실제로 표본 잡음이었다.
+Validation of the effect: the teacher candidate's `nuanceGrounded` was an ambiguous 75% at n=12 but
+settled at **95%** at n=40 — the 12-item judgement really had been sampling noise.
 
-### 4. 자체 벤치마크 하네스 — 측정 신뢰성 결함 9건 발견·수정
+### 4. Purpose-built benchmark harness — 9 measurement-reliability defects found and fixed
 
-측정값을 믿기 전에 측정기를 먼저 의심한 사례들. 전부 실제 데이터를 오염시키고 있었거나
-오염시킬 뻔했음:
+Cases of doubting the instrument before trusting its readings. Every one was already contaminating
+real data or about to:
 
-| 결함 | 증상 | 수정 |
+| Defect | Symptom | Fix |
 |---|---|---|
-| 스트림 폴백이 TTFB를 덮어씀 | 스트리밍이 실패한 항목만 통계에서 사라짐 | 첫 측정 보존 + `streamFallbackRate` 기록 |
-| 키 로테이션 대기가 지연에 섞임 | latency가 API 속도가 아닌 쿼터 대기를 포함 | 타이머를 루프 안으로 |
-| `minIntervalMs`가 rate limiter가 아님 | 동시성>1이면 무의미 | 명시적 throw |
-| 가격표 검증 부재 | gemini 가격이 2배로 틀림 | `fetchedAt` 검증 |
-| reasoning 응답 파서 | **55건 전량 `alternatives` 소실, 15건은 번역문 자체가 모델 사고 과정** | `stripThinking` + 후보 파싱 |
-| 요약 리포트가 15룰 중 1룰만 표시 | 96.2%를 100%로 보고 | 최저 룰 + 룰 이름 표시 |
-| 죽은 키/네트워크 끊김을 항목 실패로 기록 | **재개가 건너뛰어 145건 영구 소실 직전** | 런타임 장애는 run을 즉시 중단 |
-| judge가 잘린 응답을 조용히 폐기 | 모델마다 표본 크기가 달라져 비교 불성립 | 재시도 + 표본 고정 |
-| 숨은 thinking 토큰이 과금에서 빠짐 | reasoning 모델의 cost 열이 **실제의 절반**으로 보고됨 | `total − prompt − completion`으로 역산해 출력 요금에 합산 |
+| Stream fallback overwrote TTFB | Only the items where streaming failed vanished from the statistics | Preserve the first measurement + record `streamFallbackRate` |
+| Key-rotation wait mixed into latency | latency included quota waiting rather than API speed | Move the timer inside the loop |
+| `minIntervalMs` was not a rate limiter | Meaningless at concurrency > 1 | Explicit throw |
+| No validation of the price table | The gemini price was off by 2× | `fetchedAt` validation |
+| Reasoning-response parser | **All 55 items lost `alternatives`; in 15 the translation itself was the model's thinking** | `stripThinking` + candidate parsing |
+| Summary report showed 1 of 15 rules | Reported 96.2% as 100% | Show the lowest rule + the rule name |
+| Dead key / network drop logged as item failure | **Resume skipped them — 145 items were about to be lost permanently** | A runtime failure stops the run immediately |
+| Judge silently discarded truncated responses | Sample size differed per model, so comparison broke down | Retry + fixed sample |
+| Hidden thinking tokens missing from billing | The cost column for reasoning models reported **half the real figure** | Back out `total − prompt − completion` and add it to the output charge |
 
-**공통 교훈**: 실패를 "이 항목의 속성"으로 볼지 "런타임의 속성"으로 볼지 구분하지 않으면,
-장애 1건이 측정 145건으로 위장한다.
+**The shared lesson**: without distinguishing whether a failure is "a property of this item" or
+"a property of the runtime", one outage disguises itself as 145 measurements.
 
-### 5. 비용 최적화 — 무료 티어 예산 80% 확장
+### 5. Cost optimisation — 80% more free-tier budget
 
-Groq가 실사용량이 아니라 요청의 `max_tokens`까지 예약 차감한다는 것을 실측으로 파악.
-전 모델 completion 토큰 분포(p99 499, max 581)를 근거로 상한을 2048 → 768로 조정,
-하루 처리량 70 → 126 calls (+80%).
+Measured and confirmed that Groq deducts against the request's `max_tokens` reservation, not actual
+usage. Using the completion-token distribution across all models (p99 499, max 581) as evidence,
+lowered the cap from 2048 → 768: daily throughput 70 → 126 calls (+80%).
 
-OpenRouter 기본 라우팅이 최저가=최저속임을 실측(gpt-oss-120b: 34.5s vs Groq 핀 2.4s)하고
-프로바이더 핀 옵션을 구현 — 지연이 모델 속성이 아닌 중개 라우팅에 오염되는 것을 차단.
-
----
-
-## 방법론에서 지킨 것 (면접에서 설명할 수 있는 부분)
-
-- **평가셋 동결**: FLORES `devtest` split + seed 고정. 학습 데이터는 `dev` split에서만
-  뽑아 구조적으로 겹침 0을 보장 (미실시, 규칙만 확정)
-- **재현성**: 모든 run이 `promptHash` / `datasetChecksums` / git sha / 모델 ID를 기록.
-  해시가 다르면 비교 불가로 표시
-- **단일 숫자의 위험**: 요약 표의 compliance는 15룰 **최저값 + 룰 이름**. 평균이나
-  대표 룰 하나는 만점이 이어지는 동안 거짓말을 한다
-- **판정자 고정**: LLM-as-judge는 5개 run 전부 동일 모델·동일 루브릭 해시·동일 12문항.
-  판정자가 섞이면 리포트가 "비교 불가"를 출력
-- **알려진 한계를 리포트에 명시**: judge n=12, 로컬 1 run vs 3 runs, dirty git tree 표시
+Measured that OpenRouter's default routing means cheapest = slowest (gpt-oss-120b: 34.5s vs 2.4s
+pinned to Groq) and implemented a provider-pin option — blocking latency from being contaminated by
+broker routing rather than model behaviour.
 
 ---
 
-## 아직 안 한 것 (정직하게)
+## Methodology that was held to (the parts explainable in an interview)
 
-- judge 표본이 12문항 → 40문항 확장 초안 작성됨, 미검토
-- LoRA 파인튜닝 미착수. 목표는 "thinking 없이도 thinking만큼" (FINETUNING 12.7)
-- no-think는 1 run만 측정 (베이스라인은 3 runs)
+- **Frozen eval set**: FLORES `devtest` split + fixed seed. Training data is drawn only from the
+  `dev` split, guaranteeing structural zero overlap (not yet executed; the rule is settled)
+- **Reproducibility**: every run records `promptHash` / `datasetChecksums` / git sha / model id.
+  Differing hashes are flagged as not comparable
+- **The danger of a single number**: compliance in the summary table is the **lowest of the 15 rules
+  plus the rule name**. An average, or one representative rule, lies for as long as perfect scores
+  keep coming
+- **Fixed judge**: LLM-as-judge uses the same model, the same rubric hash, and the same 12 items
+  across all 5 runs. If judges are mixed, the report prints "not comparable"
+- **Known limitations stated in the report**: judge n=12, local 1 run vs 3 runs, dirty-git-tree flag
+
+---
+
+## Not done yet (honestly)
+
+- Draft written to grow the judge sample 12 → 40 items; not yet reviewed
+- LoRA fine-tuning not started. The goal is "as good as thinking, without thinking" (FINETUNING §12.7)
+- no-think measured over 1 run only (the baseline is 3 runs)

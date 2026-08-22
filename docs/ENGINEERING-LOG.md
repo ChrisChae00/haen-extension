@@ -1,221 +1,235 @@
-# 엔지니어링 로그 — 문제 · 원인 · 해결 · 결과
+# Engineering log — problem · cause · fix · result
 
-이 프로젝트에서 **무엇이 잘못됐고 어떻게 고쳤는지**의 기록. 진행 중인 작업과 다음 할 일은
-`docs/local/HANDOFF.md`(커밋 안 함)에, 성과 수치 요약은 [RESULTS-LOG.md](RESULTS-LOG.md)에,
-최신 숫자의 원본은 `bench/REPORT.md`에 있다.
+The record of **what went wrong in this project and how it was fixed**. Work in progress and next
+steps live in `docs/local/HANDOFF.md` (not committed), the outcome summary in
+[RESULTS-LOG.md](RESULTS-LOG.md), and the source of the latest numbers in `bench/REPORT.md`.
 
-시간순이 아니라 **문제 유형별**로 묶었다. 같은 실수를 반복하지 않으려면 언제 겪었는지보다
-어떤 종류의 실수였는지가 중요하기 때문이다.
+Grouped **by kind of problem**, not chronologically. To avoid repeating a mistake, what kind of
+mistake it was matters more than when it happened.
 
 ---
 
-## 1. 측정기가 거짓말한 경우 (9건)
+## 1. When the instrument lied (9 cases)
 
-벤치마크의 결론을 믿기 전에 벤치마크 자체를 의심해야 했던 사례들. 전부 **정상 종료했고,
-결과 파일도 멀쩡해 보였다**. 그래서 테스트로는 안 잡혔다.
+Cases where the benchmark itself had to be doubted before its conclusions could be trusted. Every
+one of them **exited cleanly, and the result files looked fine**. That is why tests did not catch them.
 
-### 1.1 스트림 폴백이 TTFB를 덮어씀
+### 1.1 Stream fallback overwrote TTFB
 
-- **증상**: 스트리밍이 실패해 재시도된 항목의 TTFB가 `null`로 기록됨
-- **원인**: `apiClient`가 스트림 실패 시 `onChunk` 없이 한 번 더 호출한다. 두 번째 응답의
-  `ttfbMs: null`이 첫 측정을 덮어썼다
-- **왜 위험한가**: 스트리밍이 말썽인 항목만 TTFB 통계에서 사라진다 — 즉 **가장 느렸을
-  항목들이 조용히 빠지고 평균이 좋아진다**
-- **해결**: 첫 측정을 보존하고 `streamFallbackRate`를 별도 지표로 기록
-- **결과**: 이후 모든 run에서 폴백률 0.0 확인. 옛 gemini run의 편향 크기도 사후에 0으로 확정
+- **Symptom**: for items where streaming failed and was retried, TTFB was recorded as `null`
+- **Cause**: on stream failure `apiClient` re-issues the call once more without `onChunk`. The
+  second response's `ttfbMs: null` overwrote the first measurement
+- **Why it is dangerous**: exactly the items where streaming misbehaved disappear from the TTFB
+  statistics — that is, **the slowest items silently drop out and the average improves**
+- **Fix**: preserve the first measurement and record `streamFallbackRate` as a separate metric
+- **Result**: every run since confirms a fallback rate of 0.0. The size of the bias in the old
+  gemini run was retroactively established as zero too
 
-### 1.2 키 로테이션 대기가 지연에 섞임
+### 1.2 Key-rotation wait mixed into latency
 
-- **원인**: 쿼터 소진으로 다음 키로 넘어가는 대기 시간이 `latencyMs` 타이머 안에 있었다
-- **해결**: 타이머 시작점을 재시도 루프 안으로 이동
-- **교훈**: latency는 "모델이 얼마나 걸리나"여야 한다. 하네스 사정이 섞이면 모델 비교가 아니다
+- **Cause**: the wait while moving to the next key after quota exhaustion sat inside the
+  `latencyMs` timer
+- **Fix**: moved the timer start inside the retry loop
+- **Lesson**: latency has to mean "how long the model takes". Once harness circumstances are mixed
+  in, it is not a model comparison any more
 
-### 1.3 `minIntervalMs`가 rate limiter가 아니었음
+### 1.3 `minIntervalMs` was not a rate limiter
 
-- **원인**: 항목 사이 sleep이라 `concurrency > 1`이면 아무것도 제한하지 않았다
-- **해결**: 동시성이 1보다 크면 throw. 조용히 틀리느니 시끄럽게 죽는 쪽
+- **Cause**: it was a sleep between items, so at `concurrency > 1` it limited nothing
+- **Fix**: throw if concurrency is greater than 1. Better to die loudly than to be quietly wrong
 
-### 1.4 가격표 검증 부재
+### 1.4 No validation of the price table
 
-- **증상**: `gemini-3.6-flash` 가격이 실제의 2배로 기록돼 있었음
-- **해결**: 모든 가격 행에 `fetchedAt`을 붙이고 리포트에 출력. 확인 불가능한 행은 **날짜를
-  올리지 않는다** — 오래된 날짜는 정보고, 틀린 날짜는 오염이다
+- **Symptom**: the `gemini-3.6-flash` price was recorded at twice the real value
+- **Fix**: attach `fetchedAt` to every price row and print it in the report. Rows that cannot be
+  verified **do not get their date bumped** — an old date is information, a wrong date is contamination
 
-### 1.5 reasoning 모델 응답 파서 — 가장 큰 사고
+### 1.5 Reasoning-model response parser — the biggest incident
 
-- **증상**: `qwen3.6-27b` 응답 55건에서 `alternatives`가 통째로 비어 있었고, 15건은
-  `natural`에 **모델의 사고 과정 문장**이 들어 있었다
-- **원인 둘**:
-  1. `<think>` 블록을 안 걷어낸 채 탐욕적으로 `{ ... }`를 매칭 → 사고 과정 속 중괄호가 섞임
-  2. 응답이 잘리면 salvage 로직이 **모델의 스크래치패드에서** `"natural": "..."`을 건져옴
-- **해결**: `stripThinking()` 추가. 태그가 없는 경우(Alibaba가 서빙하는 qwen3.6은 평문으로
-  사고를 흘림)까지 잡으려고, 후보 시작 위치를 순서대로 시도해 **`natural`을 가진 실제
-  객체로 파싱되는 첫 후보**를 채택하도록 변경. `parsePartial`은 첫 매치가 아니라 **마지막
-  매치**를 쓴다(스케치가 먼저 나오고 진짜 답이 나중에 나오므로)
-- **결과**: 저장된 raw 848건을 새 파서로 재파싱해 대조 — gpt-oss 두 run은 무사
-  (`naturalDiffers=0`). 확장 사용자에게도 그대로 있던 버그였다
-- **교훈**: **reasoning 모델을 새 프로바이더에서 재기 시작할 때는 raw 한 건을 눈으로 볼 것.**
-  `parsed`만 보면 salvage된 쓰레기도 정상으로 보인다
+- **Symptom**: 55 `qwen3.6-27b` responses had `alternatives` entirely empty, and in 15 of them
+  `natural` contained **sentences of the model's thinking process**
+- **Two causes**:
+  1. greedily matching `{ ... }` without stripping the `<think>` block → braces inside the thinking
+     got mixed in
+  2. when the response was truncated, the salvage logic pulled `"natural": "..."` **out of the
+     model's scratchpad**
+- **Fix**: added `stripThinking()`. To also catch the untagged case (the qwen3.6 that Alibaba serves
+  leaks its thinking as plain text), candidate start positions are tried in order and the **first
+  candidate that parses into a real object with a `natural` field** is taken. `parsePartial` uses
+  the **last** match rather than the first (the sketch comes first and the real answer later)
+- **Result**: re-parsed all 848 stored raw responses with the new parser and diffed — the two
+  gpt-oss runs were unaffected (`naturalDiffers=0`). The bug had been hitting extension users too
+- **Lesson**: **when starting to measure a reasoning model on a new provider, look at one raw
+  response with your own eyes.** Looking only at `parsed`, salvaged garbage looks fine
 
-### 1.6 요약 리포트가 15룰 중 1룰만 보고 있었음
+### 1.6 The summary report was looking at 1 of 15 rules
 
-- **증상**: `gpt-oss-20b`가 `jsonValid` 97.6%인데 표에는 compliance **100%**
-- **원인**: 요약 열이 15룰 중 가장 통과하기 쉬운 `hasAllRequired` 하나만 읽었다. 앞의 세
-  모델이 전부 만점이라 세 run 동안 티가 안 났다
-- **해결**: **15룰 최저값 + 그 룰 이름**을 표시 (`96.2% (altsExactlyTwo)`)
-- **부수 효과**: `gemini-3.5-flash-lite`가 100% → **99.5% (noHanjaLeak)**로 정정됨
-- **교훈**: 여러 지표를 하나로 접을 때는 **접는 함수를 이름에 드러낼 것**. "Compliance"라는
-  이름은 15룰 전체로 읽히는데 실제로는 1룰이었고, 만점이 이어지는 동안엔 아무도 모른다
+- **Symptom**: `gpt-oss-20b` had `jsonValid` 97.6% but the table showed compliance **100%**
+- **Cause**: the summary column read only `hasAllRequired`, the easiest of the 15 rules to pass.
+  The first three models were all perfect, so it went unnoticed for three runs
+- **Fix**: display **the lowest of the 15 rules plus that rule's name** (`96.2% (altsExactlyTwo)`)
+- **Side effect**: `gemini-3.5-flash-lite` was corrected from 100% → **99.5% (noHanjaLeak)**
+- **Lesson**: when folding several metrics into one, **make the folding function visible in the
+  name**. "Compliance" reads as all 15 rules but was actually 1, and while perfect scores keep
+  coming nobody can tell
 
-### 1.7~1.8 런타임 장애를 항목 실패로 기록 (같은 구조, 세 번 발생)
+### 1.7–1.8 Runtime failures logged as item failures (same shape, happened three times)
 
-세 번 다 같은 모양이었다: **런타임 장애 → 남은 항목이 밀리초 단위로 error 행이 됨 →
-재개가 디스크의 행을 건너뜀 → 영구 오염**.
+All three times the same shape: **runtime failure → the remaining items become error rows within
+milliseconds → resume skips the rows already on disk → permanent contamination**.
 
-| 발생 | 트리거 | 피해 |
+| Occurrence | Trigger | Damage |
 |---|---|---|
-| 1회 | OpenRouter 키의 **주간 지출 한도**(잔액과 별개)로 401 | qwen 384/424, gpt-oss 350/424가 error 행 |
-| 2회 | Alibaba 업스트림 429 폭주 | 재개할 때마다 1~3건 하고 멈춤 |
-| 3회 | 밤사이 **네트워크 끊김** | 424건 중 **145건 손실 직전** |
+| 1st | 401 from the OpenRouter key's **weekly spend limit** (separate from balance) | qwen 384/424, gpt-oss 350/424 became error rows |
+| 2nd | Burst of 429s from the Alibaba upstream | Each resume did 1–3 items and stopped |
+| 3rd | **Network dropped** overnight | **145 of 424 items about to be lost** |
 
-- **해결**:
-  - `InvalidKeyError`(죽은 키)를 `AllKeysExhausted`로 올려 run을 즉시 정지
-  - `NetworkGone` 신설 — **연속 10건 fetch 실패면 run 자체를 세운다.** 모델이 혼자
-    10건 연속 도달 불가가 될 리 없으니 그건 145개의 측정이 아니라 장애 1건이다
-  - HTTP 5xx는 제외 — 연결은 닿았으므로 그건 프로바이더의 측정값이지 끊긴 링크가 아니다
-  - 중단 판정을 클래스 이름 비교에서 **`e.fatal` 플래그**로 통일
-- **복구**: error 행만 걸러내고 재개. 3회차에서는 중복 1행까지 제거해 424행 clean
-- **교훈 (이 프로젝트에서 가장 값비싼 것)**: 새 실패 모드를 만나면 먼저 물어라 —
-  **이게 이 아이템의 속성인가, 런타임의 속성인가.** 후자면 기록하지 말고 멈춰야 한다
+- **Fix**:
+  - promote `InvalidKeyError` (dead key) to `AllKeysExhausted` so the run halts immediately
+  - added `NetworkGone` — **10 consecutive fetch failures stop the run itself.** A model cannot
+    become unreachable 10 times in a row on its own, so that is one outage, not 145 measurements
+  - HTTP 5xx is excluded — the connection got through, so that is a measurement of the provider,
+    not a broken link
+  - unified the halt decision from class-name comparison to an **`e.fatal` flag**
+- **Recovery**: filtered out the error rows and resumed. On the third occurrence one duplicate row
+  was also removed, leaving a clean 424
+- **Lesson (the most expensive one in this project)**: when meeting a new failure mode, ask first —
+  **is this a property of this item, or a property of the runtime?** If the latter, do not record it;
+  stop.
 
-### 1.9 숨은 thinking 토큰이 과금에서 빠짐
+### 1.9 Hidden thinking tokens missing from billing
 
-- **증상**: `gemini-3.7-flash`의 OpenAI 호환 응답이 `prompt 23 + completion 592`인데
-  `total 1522`
-- **원인**: Google은 thinking 토큰을 **출력으로 과금하면서 `completion_tokens`에는 안 넣는다**.
-  네이티브 API의 `thoughtsTokenCount`로 교차 확인
-- **해결**: `total − prompt − completion`으로 역산해(`reasoning_tokens`) 출력 요금에 합산.
-  숨기지 않는 모델은 0이 나오므로 기존 행은 영향 없음(`gemini-3.5-flash-lite`: 23+451=474)
-- **결과**: 3.7-flash의 cost/1k가 $1.7 → **$3.02**로 정정. 교사 데이터 예산을 절반으로
-  잡고 시작할 뻔했다
+- **Symptom**: the OpenAI-compatible response from `gemini-3.7-flash` reported
+  `prompt 23 + completion 592` but `total 1522`
+- **Cause**: Google **bills thinking tokens as output but leaves them out of `completion_tokens`**.
+  Cross-checked against the native API's `thoughtsTokenCount`
+- **Fix**: back out `total − prompt − completion` (`reasoning_tokens`) and add it to the output
+  charge. Models that do not hide anything yield 0, so existing rows are unaffected
+  (`gemini-3.5-flash-lite`: 23+451=474)
+- **Result**: 3.7-flash cost/1k corrected from $1.7 → **$3.02**. The teacher-data budget had nearly
+  been set at half of what it should be
 
-### 공통 교훈
+### Shared lessons
 
-1. **정상 종료는 정확성의 증거가 아니다.** 위 9건 중 크래시를 낸 것은 0건이다
-2. 실패를 어디에 기록하느냐가 데이터의 수명을 정한다. 재개 로직이 있는 시스템에서
-   **잘못 기록된 실패는 영구적**이다
-3. 지표를 하나로 접을 때는 접는 방식을 이름에 드러내고, 최악값을 쓴다
-
----
-
-## 2. 반증된 가설
-
-측정의 목적은 가설을 확인하는 게 아니라 틀린 가설을 빨리 죽이는 것이었다.
-
-### 2.1 "번역 품질은 파라미터 수가 지배한다" — 반증
-
-14B(로컬 Q4)부터 120B까지 **6개 모델의 COMET 신뢰구간이 전부 겹친다**
-(0.8849~0.8932, 폭 0.008, n=212). 모델 선택이 이 태스크의 번역 품질을 좌우하지 않는다.
-
-세대 차이는 갈랐다 — `gemini-3.7-flash`가 0.8962 (0.890–0.902)로 이 겹침 구간에서
-처음 분리된 모델이다. **크기가 아니라 세대**였다.
-
-### 2.2 "compliance가 파인튜닝이 먹히는 지점" — 반증
-
-튜닝 전 로컬 14B가 이미 **15룰 전부 100%, 한자 누출 636건 중 0건**. 올릴 게 없었다.
-이 가설의 근거였던 `llama-3.3-70b`의 `noHanjaLeak` 66.7%는 **그 모델 하나의 결함**이었지
-크기와 무관한 일반 현상이 아니었다.
-
-### 2.3 "설명 품질도 크기를 따른다" — 반증
-
-LLM-as-judge `nuanceGrounded`: `qwen3.6-27b` 91.7% > `gpt-oss-120b` 58.3%.
-같은 Qwen 계열 27B가 120B를 이긴다. 크기로 메울 격차였다면 120B가 중간에 있어야 했다.
-**사후학습의 차이**이고, 그래서 LoRA가 손댈 수 있는 종류라는 결론으로 이어졌다.
-
-### 2.4 "지연의 주범은 1,365토큰 프롬프트" — 반증
-
-ollama 네이티브 타이밍으로 분해한 결과 43초 중 **프리필은 3.2초**뿐이고
-**thinking이 23.9초(59%)**, 디코딩이 17.1초였다. 프롬프트 축소는 최대 3초짜리 카드라
-`promptHash`를 깨뜨릴 값이 없다. **최적화 대상을 측정 없이 골랐으면 여기를 팠을 것이다.**
+1. **A clean exit is not evidence of correctness.** Zero of the 9 cases above produced a crash
+2. Where a failure is recorded determines the lifetime of the data. In a system with resume logic,
+   **a wrongly recorded failure is permanent**
+3. When folding metrics into one, make the folding visible in the name, and use the worst value
 
 ---
 
-## 3. 성능 개선 — thinking 예산
+## 2. Disproved hypotheses
 
-**문제**: 로컬 14B의 latency p50 40초. 사이드패널 UX로 쓸 수 없다.
+The point of measuring was not to confirm hypotheses but to kill wrong ones quickly.
 
-**측정**: ollama 네이티브 `/api/chat`이 프리필/디코딩을 분리 보고한다(OpenAI 호환 경로는
-안 준다). thinking 토큰은 `eval_count`에 안 들어가므로
-`total − load − prompt_eval − eval`의 미계상 구간이 곧 thinking이다.
+### 2.1 "Translation quality is dominated by parameter count" — disproved
 
-**수단 탐색** — ollama의 OpenAI 호환 엔드포인트에서 thinking을 끄는 방법은 하나뿐:
+From 14B (local Q4) to 120B, **the COMET confidence intervals of all six models overlap**
+(0.8849–0.8932, width 0.008, n=212). Model choice does not drive translation quality on this task.
 
-| 시도 | 결과 |
+Generation did separate them — `gemini-3.7-flash` at 0.8962 (0.890–0.902) is the first model to
+break out of that overlapping band. **Not size, but generation.**
+
+### 2.2 "Compliance is where fine-tuning will pay off" — disproved
+
+Before any tuning the local 14B was already at **100% on all 15 rules, 0 Hanja leaks out of 636**.
+There was nothing to raise. The evidence for this hypothesis — `llama-3.3-70b`'s `noHanjaLeak` at
+66.7% — was **a defect of that one model**, not a general size-independent phenomenon.
+
+### 2.3 "Explanation quality follows size too" — disproved
+
+LLM-as-judge `nuanceGrounded`: `qwen3.6-27b` 91.7% > `gpt-oss-120b` 58.3%. A 27B from the same Qwen
+family beats a 120B. If the gap were one size could close, the 120B would sit in the middle. It is
+**a post-training difference**, which is what led to the conclusion that LoRA can touch it.
+
+### 2.4 "The main culprit for latency is the 1,365-token prompt" — disproved
+
+Decomposing with ollama's native timings showed that of 43 seconds **prefill was only 3.2s** while
+**thinking was 23.9s (59%)** and decode 17.1s. Prompt shrinking is at most a 3-second card, not
+worth breaking `promptHash` over. **Picking an optimisation target without measuring would have
+meant digging here.**
+
+---
+
+## 3. Performance work — the thinking budget
+
+**Problem**: latency p50 of 40 seconds on the local 14B. Unusable as side-panel UX.
+
+**Measurement**: ollama's native `/api/chat` reports prefill and decode separately (the
+OpenAI-compatible path does not). Thinking tokens are not in `eval_count`, so the unaccounted
+interval `total − load − prompt_eval − eval` is exactly the thinking.
+
+**Finding a lever** — there is exactly one way to turn thinking off on ollama's OpenAI-compatible
+endpoint:
+
+| Attempt | Result |
 |---|---|
-| 시스템 프롬프트에 `/no_think` | 무시됨 |
-| body에 `"think": false` | 무시됨 |
-| **`"reasoning_effort": "none"`** | **동작** |
+| `/no_think` in the system prompt | Ignored |
+| `"think": false` in the body | Ignored |
+| **`"reasoning_effort": "none"`** | **Works** |
 
-`providerRouting`과 같은 방식으로 옵션을 관통시켰다 — 값이 없으면 필드를 안 보내므로
-**확장이 보내는 요청 바디는 바이트 단위로 동일**하다.
+The option is threaded through the same way as `providerRouting` — when the value is absent the
+field is not sent, so **the request body the extension sends is byte-identical**.
 
-**결과** (212문항, 같은 `promptHash`·`datasetChecksums`):
+**Result** (212 items, same `promptHash` and `datasetChecksums`):
 
 | | thinking on | thinking off |
 |---|---|---|
 | latency p50 | 40,087 ms | **16,211 ms** |
-| TTFB p50 | 25,144 ms | **534 ms** (47배) |
+| TTFB p50 | 25,144 ms | **534 ms** (47×) |
 | COMET | 0.8849 (0.877–0.892) | 0.8861 (0.878–0.893) |
-| compliance 15룰 최저 | 100% | 99.5% (2룰 각 1건) |
+| compliance, lowest of 15 rules | 100% | 99.5% (1 item each on 2 rules) |
 | judge `tipFactual` | 91.7% | 66.7% (n=12) |
 
-**thinking이 지키고 있던 것은 번역 품질도 스키마 준수도 아니었고 `tip`/`nuance`의
-근거성이었다. 그리고 그 대가가 24초였다.** 이 결과가 튜닝 목표를
-"nuance를 27B 수준으로"에서 **"thinking 없이도 thinking만큼"**으로 바꿨다.
+**What thinking was protecting was neither translation quality nor schema compliance but the
+groundedness of `tip`/`nuance`. And the price of that was 24 seconds.** This result changed the
+tuning goal from "get nuance to 27B level" to **"as good as thinking, without thinking"**.
 
 ---
 
-## 4. 비용 구조에서 발견한 것
+## 4. What the cost structure revealed
 
-| 발견 | 내용 | 대응 |
+| Finding | Detail | Response |
 |---|---|---|
-| Groq는 **예약 과금** | 실사용량이 아니라 요청의 `max_tokens`까지 TPD/TPM에서 차감 | 전 모델 completion 분포(p99 499, max 581) 실측 → 상한 2048 → 768. 하루 70 → **126 calls (+80%)** |
-| OpenRouter 기본 라우팅 = **최저가 = 최저속** | gpt-oss-120b가 CoreWeave 34.5s vs Groq 핀 2.4s | `providerRouting`으로 백엔드 고정. `allow_fallbacks: false`(폴백을 켜면 latency 분포가 두 스택의 혼합이 된다) |
-| 1st-party 서빙 선택 근거 | 서드파티는 대개 fp8/int8로 양자화해 올린다 | qwen3.6-27b는 Alibaba 핀. 로컬을 Q4_K_M이라 명시하는 것과 같은 이유로 리포트에 기록 |
-| Gemini 무료 티어는 **프로젝트 단위 쿼터** | 3.7-flash 20 RPD(3.5-flash-lite는 500) — 212문항에 11일 | 키를 늘려도 같은 프로젝트면 무의미. 종량제 결제로 해결(212×2 ≈ $1.6) |
-| thinking 토큰이 출력 과금 | 위 1.9 | `reasoning_tokens` 역산 |
+| Groq bills by **reservation** | Deducts the request's `max_tokens` from TPD/TPM, not actual usage | Measured the completion distribution across all models (p99 499, max 581) → cap 2048 → 768. Daily 70 → **126 calls (+80%)** |
+| OpenRouter default routing = **cheapest = slowest** | gpt-oss-120b on CoreWeave 34.5s vs pinned to Groq 2.4s | Pin the backend with `providerRouting`. `allow_fallbacks: false` (with fallbacks on, the latency distribution becomes a mixture of two stacks) |
+| Why first-party serving | Third parties usually quantise to fp8/int8 | qwen3.6-27b pinned to Alibaba. Recorded in the report for the same reason the local model is stated as Q4_K_M |
+| Gemini free tier has **per-project quota** | 3.7-flash 20 RPD (3.5-flash-lite 500) — 11 days for 212 items | More keys on the same project change nothing. Solved with pay-as-you-go (212×2 ≈ $1.6) |
+| Thinking tokens billed as output | See 1.9 above | Back out `reasoning_tokens` |
 
 ---
 
-## 5. 방법론에서 확정한 규칙
+## 5. Rules settled in the methodology
 
-- **평가셋 동결** — FLORES `devtest` split + seed 20260805 고정. 학습 데이터는 `dev`
-  split에서만 뽑아 구조적으로 겹침 0을 보장. 이걸 안 지키면 "우리 모델이 상용을 이겼다"가
-  시험지 유출이 된다
-- **재현성 3종** — 모든 run이 `promptHash` / `datasetChecksums` / git sha를 기록하고,
-  dirty 트리에서 잰 run은 표에 표시된다. 하나라도 다르면 비교 불가
-- **판정자 고정** — LLM-as-judge는 전 run 동일 모델·동일 루브릭 해시·동일 문항.
-  섞이면 리포트가 "비교 불가"를 출력한다
-- **표본 크기는 검정력으로 정한다** — judge는 같은 문항을 모델마다 채점하므로 paired
-  비교(McNemar)이고, 정확 p값은 모든 discordant가 한 방향일 때 `2 × 0.5^k`다.
-  n=12에서는 k=5가 0.0625로 **최선의 결과조차 유의수준을 못 넘는다**. 표본을 12 → 52로
-  키운 것은 정밀도 문제가 아니라 **측정 가능성 자체**의 문제였다
-- **관용구 세트는 judge 전용** — 관용구의 올바른 번역은 참조와 표면이 겹치지 않아
-  COMET이 0.8336으로 떨어진다(FLORES 0.896). 지표마다 맞는 데이터가 다르다
-- **교사도 틀린다** — 확정된 교사 `gemini-3.7-flash`가 `altsDistinct` 82.5%(casual 15/20).
-  판정자 노트가 원인을 짚었다: 대안을 소스 언어로 나열, 두 카테고리가 같은 register.
-  **틀린 출력은 학습 데이터에서 걸러내야 한다** — 배우면 그대로 나온다
+- **Frozen eval set** — FLORES `devtest` split + fixed seed 20260805. Training data comes only from
+  the `dev` split, guaranteeing structural zero overlap. Without this, "our model beat a commercial
+  one" is just a leaked exam paper
+- **Three reproducibility fields** — every run records `promptHash` / `datasetChecksums` / git sha,
+  and runs measured on a dirty tree are flagged in the table. If any one differs, it is not comparable
+- **Fixed judge** — LLM-as-judge uses the same model, the same rubric hash and the same items across
+  all runs. If they are mixed, the report prints "not comparable"
+- **Sample size is set by statistical power** — the judge scores the same items across models, so it
+  is a paired comparison (McNemar), and the exact p-value when every discordant pair points one way
+  is `2 × 0.5^k`. At n=12, k=5 gives 0.0625, so **even the best possible result cannot clear the
+  significance threshold**. Growing the sample 12 → 52 was not a precision problem but a problem of
+  **measurability itself**
+- **The idiom set is judge-only** — a correct translation of an idiom does not overlap the reference
+  on the surface, so COMET drops to 0.8336 (FLORES 0.896). Different metrics want different data
+- **Teachers are wrong too** — the chosen teacher `gemini-3.7-flash` scores `altsDistinct` 82.5%
+  (casual 15/20). The judge's notes pinpointed the cause: alternatives listed in the source language,
+  and two categories at the same register. **Wrong outputs have to be filtered out of the training
+  data** — whatever is learned comes back out
 
 ---
 
-## 6. 프로젝트 발전 요약
+## 6. Project progression summary
 
-| 단계 | 내용 |
+| Stage | Detail |
 |---|---|
-| Phase 0–5 (2026-07) | 확장 구현 — i18n, 스토리지, 스트리밍, 캐싱, 재시도, 3개 프로바이더 |
-| 디자인 개편 (2026-07-28~) | Side Panel 전환, 역할 기반 컬러 토큰(AA 4.5:1 강제), 3단 테마 |
-| 벤치 하네스 (2026-08-05~) | 제로 의존성 Node 하네스. 확장의 `TranslatorAPI`를 그대로 구동해 **실사용 경로를 측정** |
-| 측정 (~2026-08-19) | 5모델 × 212문항. 가설 2개 반증, 측정기 결함 8건 수정 |
-| 속도 (2026-08-21) | 지연 분해 → thinking 제거 → latency −60%, TTFB −98% |
-| 교사 선정 (2026-08-22) | gemini-3.7-flash 측정·판정 → 확정. judge 표본 12 → 52 확대 |
-| 다음 | LoRA distillation — "thinking 없이도 thinking만큼" |
+| Phase 0–5 (2026-07) | Extension implementation — i18n, storage, streaming, caching, retries, 3 providers |
+| Design overhaul (2026-07-28~) | Move to the Side Panel, role-based colour tokens (AA 4.5:1 enforced), 3-way theme |
+| Bench harness (2026-08-05~) | Zero-dependency Node harness. Drives the extension's `TranslatorAPI` directly so it **measures the real user path** |
+| Measurement (~2026-08-19) | 5 models × 212 items. 2 hypotheses disproved, 8 instrument defects fixed |
+| Speed (2026-08-21) | Latency decomposition → thinking removed → latency −60%, TTFB −98% |
+| Teacher selection (2026-08-22) | gemini-3.7-flash measured and judged → chosen. Judge sample grown 12 → 52 |
+| Next | LoRA distillation — "as good as thinking, without thinking" |
