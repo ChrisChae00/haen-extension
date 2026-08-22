@@ -19,13 +19,13 @@ compliance, latency, cost, and LLM judgement.
 
 ---
 
-## Scale (as of 2026-08-21)
+## Scale (as of 2026-08-22)
 
 | Item | Value |
 |---|---|
 | Models measured | 7 (gemini-3.7-flash, gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b, local qwen3:14b think/no-think) |
 | Dataset | 212 items (FLORES-200 devtest 200 + 12 hand-written) + 40 judge-only idiom items, both directions |
-| Total API calls | 2,800+ (212 × 1–3 runs per model) |
+| Total API calls | 3,200+ (212 × 2–3 runs per model) |
 | Measurement axes | COMET · chrF++ · BLEU · 15-rule compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
 | Paid judge verdicts | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
 | Total paid measurement cost | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
@@ -120,7 +120,7 @@ broker routing rather than model behaviour.
   keep coming
 - **Fixed judge**: LLM-as-judge uses the same model, the same rubric hash, and the same 12 items
   across all 5 runs. If judges are mixed, the report prints "not comparable"
-- **Known limitations stated in the report**: judge n=12, local 1 run vs 3 runs, dirty-git-tree flag
+- **Known limitations stated in the report**: judge n=12, dirty-git-tree flag
 
 ---
 
@@ -128,4 +128,3 @@ broker routing rather than model behaviour.
 
 - Draft written to grow the judge sample 12 → 40 items; not yet reviewed
 - LoRA fine-tuning not started. The goal is "as good as thinking, without thinking" (FINETUNING §12.7)
-- no-think measured over 1 run only (the baseline is 3 runs)

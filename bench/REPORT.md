@@ -3,7 +3,7 @@
 > Measured from `bench/results/*/metrics.json`. Every number below traces back to a
 > real run - see the `git sha` / `prompt hash` columns to reproduce it.
 
-Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120b, gpt-oss-20b, qwen3-14b-local, qwen3-14b-local-nothink, qwen3.6-27b.
+Benchmarked **8 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gemini-3.7-flash-ext, gpt-oss-120b, gpt-oss-20b, qwen3-14b-local, qwen3-14b-local-nothink, qwen3.6-27b.
 
 ## Model Benchmark Comparison Matrix
 
@@ -14,8 +14,9 @@ Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120
 | **gpt-oss-120b** | `openrouter` | 212 × 2 | 100.0% (altsExactlyTwo) | 0.8932 (0.886–0.899) | 48.60 | 2196.5 / 3272.0 / 4688.5 ms | 1486.5 ms | $0.6205 | 2026-08-18 |
 | **qwen3.6-27b** | `openrouter` | 212 × 2 | 54.2% (noPreamble) | 0.8918 (0.884–0.898) | 47.05 | 52284.5 / 67880.9 / 89652.0 ms | 36438.0 ms | $10.9397 | 2026-08-18 |
 | **gpt-oss-20b** | `openrouter` | 212 × 2 | 96.2% (altsExactlyTwo) | 0.8883 (0.881–0.895) | 48.28 | 1477.0 / 2456.9 / 4401.3 ms | 1212.0 ms | $0.3812 | 2026-08-18 |
-| **qwen3-14b-local-nothink** | `ollama` | 212 × 1 | 99.5% (altsSizesValid) | 0.8861 (0.878–0.893) | 47.59 | 16210.5 / 22028.9 / 25389.3 ms | 534.0 ms | $0.0000 | n/a (local) |
+| **qwen3-14b-local-nothink** | `ollama` | 212 × 3 | 99.5% (altsSizesValid) | 0.8861 (0.878–0.893) | 47.59 | 16210.5 / 22028.9 / 25389.3 ms | 534.0 ms | $0.0000 | n/a (local) |
 | **gemini-3.7-flash** | `google` | 212 × 2 | 100.0% (altsExactlyTwo) | 0.8962 (0.890–0.902) | 49.98 | 3717.0 / 6321.7 / 10630.1 ms | 2796.5 ms | $3.0176 | 2026-08-21 |
+| **gemini-3.7-flash-ext** | `google` | 40 × 1 | 100.0% (altsExactlyTwo) | 0.8336 (0.791–0.875) | 53.97 | 2705.0 / 3554.2 / 7141.3 ms | 2014.5 ms | $2.4106 | 2026-08-21 |
 
 ## Determinism & Reproducibility
 
@@ -26,10 +27,11 @@ Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120
 | gpt-oss-120b | 0.0% | 0.072 (±0.144) | 0.0% | 0.0% | `bbf73e1a308e` **(dirty)** | `3d18dda71bc9…` |
 | qwen3.6-27b | 0.0% | 0.316 (±0.632) | 0.0% | 0.0% | `05a099062cca` **(dirty)** | `3d18dda71bc9…` |
 | gpt-oss-20b | 7.5% | 0.098 (±0.197) | 0.5% | 3.8% | `8e672b2857b2` **(dirty)** | `3d18dda71bc9…` |
-| qwen3-14b-local-nothink | — | — | 0.0% | 0.0% | `7571473e0d5d` **(dirty)** | `3d18dda71bc9…` |
+| qwen3-14b-local-nothink | 100.0% | 0.000 (±0.000) | 0.0% | 0.0% | `a7daa694e78c` **(dirty)** | `3d18dda71bc9…` |
 | gemini-3.7-flash | 0.0% | 0.400 (±0.800) | 0.0% | 0.0% | `a7daa694e78c` | `3d18dda71bc9…` |
+| gemini-3.7-flash-ext | — | — | 0.0% | 0.0% | `833feb491989` **(dirty)** | `3d18dda71bc9…` |
 
-> **These rows were not all measured by the same code.** 7 distinct git sha(s) across 7 run(s); dirty working tree for gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3-14b-local-nothink, qwen3.6-27b. A dirty tree means the recorded sha is a lower bound, not the code that ran.
+> **These rows were not all measured by the same code.** 7 distinct git sha(s) across 8 run(s); dirty working tree for gemini-3.5-flash-lite, gemini-3.7-flash-ext, gpt-oss-120b, gpt-oss-20b, qwen3-14b-local-nothink, qwen3.6-27b. A dirty tree means the recorded sha is a lower bound, not the code that ran.
 > Before reading a cross-model delta off this table, check that no run predates
 > a change to the parsing, request, or scoring path - and re-run the ones that do.
 
@@ -49,6 +51,7 @@ Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120
 | gpt-oss-20b | 12 | 91.7% | 58.3% | 33.3% | 91.7% |
 | qwen3-14b-local-nothink | 12 | 100.0% | 41.7% | 50.0% | 66.7% |
 | gemini-3.7-flash | 12 | 100.0% | 75.0% | 83.3% | 100.0% |
+| gemini-3.7-flash-ext | 40 | 100.0% | 95.0% | 82.5% | 97.5% |
 
 > Judge: `anthropic/claude-sonnet-5`, binary rubric, same subset for every model.
 > Judge scores carry the judge's own biases and are for relative comparison

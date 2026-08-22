@@ -171,7 +171,7 @@ endpoint:
 The option is threaded through the same way as `providerRouting` — when the value is absent the
 field is not sent, so **the request body the extension sends is byte-identical**.
 
-**Result** (212 items, same `promptHash` and `datasetChecksums`):
+**Result** (212 items × 3 runs each, same `promptHash` and `datasetChecksums`):
 
 | | thinking on | thinking off |
 |---|---|---|
@@ -180,6 +180,7 @@ field is not sent, so **the request body the extension sends is byte-identical**
 | COMET | 0.8849 (0.877–0.892) | 0.8861 (0.878–0.893) |
 | compliance, lowest of 15 rules | 100% | 99.5% (1 item each on 2 rules) |
 | judge `tipFactual` | 91.7% | 66.7% (n=12) |
+| identical output across runs | 100.0% | 100.0% |
 
 **What thinking was protecting was neither translation quality nor schema compliance but the
 groundedness of `tip`/`nuance`. And the price of that was 24 seconds.** This result changed the
