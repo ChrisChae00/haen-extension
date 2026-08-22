@@ -3,7 +3,7 @@
 로컬 전용(`docs/`는 gitignore). 커밋되는 수치는 `bench/REPORT.md`에 있고, 이 문서는
 **"무엇을 왜 했고 무엇이 나왔나"**를 나중에 다시 읽을 수 있게 정리한 것.
 
-세부 인수인계는 `docs/local/`(커밋 안 함): [HANDOFF.md](local/HANDOFF.md)(측정 트랙),
+문제·해결의 상세 기록은 [ENGINEERING-LOG.md](ENGINEERING-LOG.md). 세부 인수인계는 `docs/local/`(커밋 안 함): [HANDOFF.md](local/HANDOFF.md)(측정 트랙),
 [FINETUNING.md](local/FINETUNING.md)(개선 트랙). 하네스 정확도 판단 근거는
 [MEASUREMENT-NOTES.md](MEASUREMENT-NOTES.md).
 
@@ -22,9 +22,10 @@ Haen — 한영 문화 뉘앙스 설명 크롬 확장. 응답이 4필드 JSON(`n
 | 항목 | 값 |
 |---|---|
 | 측정 모델 | 7 (gemini-3.7-flash, gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b, qwen3:14b 로컬 think/no-think) |
-| 데이터셋 | 212문항 (FLORES-200 devtest 200 + 직접 작성 12), 양방향 |
+| 데이터셋 | 212문항 (FLORES-200 devtest 200 + 직접 작성 12) + judge 전용 관용구 40문항, 양방향 |
 | 총 API 호출 | 2,800+ (모델당 212×1~3 runs) |
 | 측정 축 | COMET · chrF++ · BLEU · 15룰 compliance · latency/TTFB 백분위 · 토큰당 비용 · LLM-as-judge 4기준 |
+| 유료 judge 판정 | 316건 (`claude-sonnet-5` 고정, $0.0095/건) |
 | 유료 측정 총비용 | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
 | 하네스 테스트 | 36 passing (~150ms, 의존성 0) |
 
@@ -58,7 +59,19 @@ thinking 예산을 실측으로 분해해 병목을 특정하고 제거.
 - LLM-as-judge `nuanceGrounded`: gemini 100%, qwen3.6-27b 91.7%, gpt-oss-120b 58.3%,
   로컬 14B 50% — **파라미터 수를 따르지 않음**(27B가 120B를 이김)
 
-### 3. 자체 벤치마크 하네스 — 측정 신뢰성 결함 9건 발견·수정
+### 3. 측정 가능성 자체를 설계 — judge 표본을 검정력으로 결정
+
+LLM-as-judge는 같은 문항을 모델마다 채점하는 **paired 비교**이므로 McNemar 정확검정이
+적용된다. discordant가 전부 한 방향일 때 p = `2 × 0.5^k`이고, 초기 표본 n=12에서는
+k=5가 p=0.0625 — **최선의 결과조차 유의수준을 못 넘는 구조**였다.
+
+표본을 12 → 52로 키우면서 추가 문항을 **관용구로 구성**했다: 직역이 명백히 틀리는 문장이라
+`literal`과 `nuance` 필드가 반드시 일해야 정답이 된다. 양방향 × casual/business 각 10문항.
+
+효과 검증: 교사 후보의 `nuanceGrounded`가 n=12에서 75%로 애매했는데 n=40에서 **95%**로
+확정됐다 — 12문항짜리 판단은 실제로 표본 잡음이었다.
+
+### 4. 자체 벤치마크 하네스 — 측정 신뢰성 결함 9건 발견·수정
 
 측정값을 믿기 전에 측정기를 먼저 의심한 사례들. 전부 실제 데이터를 오염시키고 있었거나
 오염시킬 뻔했음:
@@ -78,7 +91,7 @@ thinking 예산을 실측으로 분해해 병목을 특정하고 제거.
 **공통 교훈**: 실패를 "이 항목의 속성"으로 볼지 "런타임의 속성"으로 볼지 구분하지 않으면,
 장애 1건이 측정 145건으로 위장한다.
 
-### 4. 비용 최적화 — 무료 티어 예산 80% 확장
+### 5. 비용 최적화 — 무료 티어 예산 80% 확장
 
 Groq가 실사용량이 아니라 요청의 `max_tokens`까지 예약 차감한다는 것을 실측으로 파악.
 전 모델 completion 토큰 분포(p99 499, max 581)를 근거로 상한을 2048 → 768로 조정,

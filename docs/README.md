@@ -6,10 +6,12 @@
 docs/                       ← 커밋됨. 오래 남는 기록
   README.md                 이 파일
   RESULTS-LOG.md            성과 요약 · 이력서용 수치 (복습 시작점)
+  ENGINEERING-LOG.md        문제 · 원인 · 해결 · 결과 (측정기 결함, 반증된 가설, 개선 기록)
   MEASUREMENT-NOTES.md      측정 정확도 문제의 발견 경위와 판단 근거
   EXTENSION-AUDIT.md        확장 pre-ship 감사 (2026-07, 디자인 개편 이전)
   local/                    ← .gitignore. 세션마다 갱신되는 작업 문서
-    HANDOFF.md              측정 트랙 인수인계 — 단계별 기록, 명령어, 함정
+    HANDOFF.md              **재개 전용** — 지금 상태, 다음 명령, 환경 함정. 끝난 일은
+                            ENGINEERING-LOG로 옮겨 길이를 일정하게 유지한다
     FINETUNING.md           개선 트랙 계획서 — 목표, 교사 선정, 학습 절차, 결정 항목
     EVIDENCE.md             저장소 전수 조사 스냅샷 (file:line 근거)
 ```
@@ -28,7 +30,8 @@ docs/                       ← 커밋됨. 오래 남는 기록
 
 - **성과·수치가 궁금하면** → `RESULTS-LOG.md`
 - **다음에 뭘 할지** → `local/FINETUNING.md` 12.8절
-- **왜 이렇게 쟀는지** → `MEASUREMENT-NOTES.md`, `local/HANDOFF.md`
+- **뭐가 잘못됐고 어떻게 고쳤는지** → `ENGINEERING-LOG.md`
+- **왜 이렇게 쟀는지** → `MEASUREMENT-NOTES.md`(초기 4건 상세)
 - **지금 숫자가 얼마인지** → `bench/REPORT.md` ← **충돌하면 항상 이게 최신**
 
 ## 규칙
