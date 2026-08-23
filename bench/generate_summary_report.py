@@ -111,7 +111,10 @@ def main():
             "Those runs predate `reasoning_tokens`, or the provider returned no `total_tokens` to derive it "
             "from, so hidden thinking was billed at zero. On `gemini-3.7-flash` that same omission "
             "understated the cost by roughly half - do not rank models on a column that mixes marked and "
-            "unmarked rows without re-running the marked ones.\n"
+            "unmarked rows without re-running the marked ones. An unmarked row is not automatically "
+            "exact either: a run recorded before `null` replaced the clamped `0` can hold items that were "
+            "never measured and cannot now say so, which makes `gemini-3.7-flash`'s own $3.0176 a ~4% "
+            "floor as well (docs/MEASUREMENT-NOTES.md 5).\n"
         )
     # reasoningEffort is a field in the request body, not a property of the response.
     # A backend that ignores it answers normally and the run is still named "-nothink",
