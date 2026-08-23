@@ -29,7 +29,7 @@ compliance, latency, cost, and LLM judgement.
 | Measurement axes | COMET · chrF++ · BLEU · 15-rule compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
 | Paid judge verdicts | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
 | Total paid measurement cost | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
-| Harness tests | 36 passing (~150ms, zero dependencies) |
+| Harness tests | 40 passing (~160ms, zero dependencies) |
 
 ---
 
@@ -93,11 +93,23 @@ real data or about to:
 | Dead key / network drop logged as item failure | **Resume skipped them — 145 items were about to be lost permanently** | A runtime failure stops the run immediately |
 | Judge silently discarded truncated responses | Sample size differed per model, so comparison broke down | Retry + fixed sample |
 | Hidden thinking tokens missing from billing | The cost column for reasoning models reported **half the real figure** | Back out `total − prompt − completion` and add it to the output charge |
+| The fix for that clamped a missing total to zero | 10 of 424 `gemini-3.7-flash` records read as "thought nothing" when the provider just never sent a total | Prefer the explicit field; derive only when `total_tokens` exists; record `null`, not `0`, otherwise — and mark the run's cost a lower bound |
 
 **The shared lesson**: without distinguishing whether a failure is "a property of this item" or
 "a property of the runtime", one outage disguises itself as 145 measurements.
 
-### 5. Cost optimisation — 80% more free-tier budget
+### 5. Re-scored the published table instead of leaving a code fix undisclosed
+
+Fixing defect #10 above only changed code; the report still showed every model's cost in one column
+with no way to tell which had thinking folded in. Re-scored all eight runs against their stored
+`predictions.jsonl` — no new API calls, COMET/chrF++/BLEU/compliance came back byte-identical
+(bootstrap CI is seeded) — and regenerated `bench/REPORT.md`. Four pre-fix rows
+(`gemini-3.5-flash-lite`, `gpt-oss-120b`, `gpt-oss-20b`, `qwen3.6-27b`) now carry `≥` on cost, and
+`gemini-3.7-flash`'s own $3.0176 is disclosed as a ~4% floor for the ten unrecoverable records —
+`total_tokens` was never persisted for them, so re-running is the only way to close the gap and it
+was judged not worth it for 4%.
+
+### 6. Cost optimisation — 80% more free-tier budget
 
 Measured and confirmed that Groq deducts against the request's `max_tokens` reservation, not actual
 usage. Using the completion-token distribution across all models (p99 499, max 581) as evidence,
