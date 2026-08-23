@@ -9,6 +9,7 @@
   "temperature": 0,
   "jsonMode": true,
   "maxTokens": null,
+  "reasoningEffort": null,
 
   "datasetVersion": "v1",
   "datasets": ["flores.jsonl", "handbuilt.jsonl"],

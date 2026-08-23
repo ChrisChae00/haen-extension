@@ -53,4 +53,9 @@ bench/results_archive/
 # Local-only working notes: handoffs, investigation memos, session state.
 # Deliberately not committed - these are scratch context for whoever picks the work up
 # next, not project documentation, and they go stale the moment they are.
-/docs/
+# Working docs: session handoffs, plans, raw evidence dumps. They churn every session
+# and describe what to do next, not what happened - the record that outlives them lives
+# in docs/*.md, which is committed.
+/docs/local/
+
+__pycache__/

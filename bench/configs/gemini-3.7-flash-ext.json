@@ -1,0 +1,23 @@
+{
+  "name": "gemini-3.7-flash-ext",
+  "harness": "haen",
+  "provider": "google",
+  "modelId": "gemini-3.7-flash",
+  "apiKeyEnv": "GEMINI_API_KEY",
+  "uiLanguage": "ko",
+  "temperature": 0,
+  "jsonMode": true,
+  "maxTokens": 8192,
+  "stream": true,
+  "datasetVersion": "v1",
+  "datasets": [
+    "handbuilt-ext.jsonl"
+  ],
+  "limit": null,
+  "runs": 1,
+  "concurrency": 1,
+  "minIntervalMs": 4200,
+  "judgeModelId": "anthropic/claude-sonnet-5",
+  "judgeProvider": "openrouter",
+  "judgeApiKeyEnv": "OPENROUTER_API_KEY"
+}

@@ -10,7 +10,7 @@ fine-tuning anything, there has to be a baseline; this produces it.
 
 ```bash
 cd bench
-npm test                                    # 15 compliance checks (verified in under 3s / ~42ms)
+npm test                                    # 40 tests: compliance rules, parsing, pacing, run-stop logic (~150ms)
 
 # 1. one-off: fetch and sample FLORES-200 (see src/sampleFlores.js for the download step)
 npm run sample-flores

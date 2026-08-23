@@ -116,6 +116,10 @@ export function makeHaenProvider(config, api = new TranslatorAPI()) {
           // OpenRouter only. Pins which backend serves the model so latency/TTFB measure
           // one serving stack; unpinned, the cheapest route wins and it is often 10x slower.
           ...(config.providerRouting ? { providerRouting: config.providerRouting } : {}),
+          // Thinking budget. Unset leaves the model's default; "none" disables reasoning
+          // on backends that honour it. Changes what the model does, not just how it is
+          // routed, so a run that sets it is a different measurement, not a faster one.
+          ...(config.reasoningEffort ? { reasoningEffort: config.reasoningEffort } : {}),
           onRaw,
           // If config.stream is true, pass a dummy onChunk to measure streaming TTFB
           ...(config.stream ? { onChunk: () => {} } : {}),
@@ -166,9 +170,25 @@ export function makeHaenProvider(config, api = new TranslatorAPI()) {
       hypothesis: typeof parsed?.natural === 'string' ? parsed.natural : '',
       raw,
       parsed,
+      // reasoning_tokens is not in the base OpenAI usage schema, and providers that
+      // serve thinking models disagree about where those tokens go. Google reports a
+      // total_tokens that exceeds prompt + completion (23 + 592 but 1522 total on
+      // gemini-3.7-flash, the gap visible as thoughtsTokenCount only on the native
+      // endpoint - see docs/ENGINEERING-LOG.md 1.9), so billing off completion_tokens
+      // alone understates a reasoning model by roughly half.
+      //
+      // Prefer the explicit field where the provider sends it. Fall back to the gap,
+      // which is 0 for models that hide nothing - but only when total_tokens is
+      // actually present. Without it the subtraction is 0 - prompt - completion, and
+      // clamping that to 0 would record "this model thought nothing" for a response
+      // that never reported a total. That is unmeasured, so it is null.
       usage: usage ? {
         prompt_tokens: usage.prompt_tokens ?? 0,
         completion_tokens: usage.completion_tokens ?? 0,
+        reasoning_tokens: usage.completion_tokens_details?.reasoning_tokens
+          ?? (usage.total_tokens == null
+            ? null
+            : Math.max(0, usage.total_tokens - (usage.prompt_tokens ?? 0) - (usage.completion_tokens ?? 0))),
       } : null,
       latencyMs,
       ttfbMs: meta.ttfbMs,

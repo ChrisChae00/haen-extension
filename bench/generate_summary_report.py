@@ -54,6 +54,7 @@ def main():
     lines.append("| Model | Provider | n (items × runs) | Compliance (worst rule) | COMET (95% CI) | chrF++ | Latency (p50/p90/p99) | Streaming TTFB (p50) | Cost / 1k | Prices as of |")
     lines.append("|---|---|---|---|---|---|---|---|---|---|")
 
+    lower_bound_rows = []
     for r in runs:
         c = r.get("config", {})
         op = r.get("operational", {})
@@ -89,6 +90,12 @@ def main():
 
         cost = op.get("costPer1kTranslations")
         cost_str = f"${cost:.4f}" if cost is not None else "—"
+        # A run that never measured thinking tokens billed them at zero, so its cost is
+        # a floor, not a figure. Unmarked, this column silently mixes two definitions of
+        # "cost" and a reader ranking models by it gets a wrong answer that looks valid.
+        if op.get("costIsLowerBound"):
+            cost_str += " ≥"
+            lower_bound_rows.append(name)
 
         prices_at = op.get("pricesFetchedAt") or "—"
 
@@ -98,6 +105,33 @@ def main():
         )
 
     lines.append("")
+    if lower_bound_rows:
+        lines.append(
+            f"> **`≥` marks a cost that excludes thinking tokens** ({', '.join(sorted(lower_bound_rows))}). "
+            "Those runs predate `reasoning_tokens`, or the provider returned no `total_tokens` to derive it "
+            "from, so hidden thinking was billed at zero. On `gemini-3.7-flash` that same omission "
+            "understated the cost by roughly half - do not rank models on a column that mixes marked and "
+            "unmarked rows without re-running the marked ones. An unmarked row is not automatically "
+            "exact either: a run recorded before `null` replaced the clamped `0` can hold items that were "
+            "never measured and cannot now say so, which makes `gemini-3.7-flash`'s own $3.0176 a ~4% "
+            "floor as well (docs/MEASUREMENT-NOTES.md 5).\n"
+        )
+    # reasoningEffort is a field in the request body, not a property of the response.
+    # A backend that ignores it answers normally and the run is still named "-nothink",
+    # so every artifact would report what was asked for and never what happened. The one
+    # metric that could contradict it does not: providers that fold thinking into
+    # completion_tokens report reasoning_tokens 0 whether the lever worked or was dropped.
+    effort_rows = sorted(
+        f"{(r.get('config') or {}).get('name', '?')} (`{(r.get('config') or {}).get('reasoningEffort')}`)"
+        for r in runs if (r.get("config") or {}).get("reasoningEffort")
+    )
+    if effort_rows:
+        lines.append(
+            f"> **Thinking budget was requested, not verified**, on: {', '.join(effort_rows)}. "
+            "`reasoning_effort` is sent in the request body and a backend that ignores it returns a "
+            "normal response, so treat the latency drop as the evidence the lever landed - not the "
+            "run name.\n"
+        )
     lines.append("## Determinism & Reproducibility\n")
     lines.append("| Model | identical output rate | chrF++ stdev (tie threshold) | failure rate | retry rate | git sha | prompt hash |")
     lines.append("|---|---|---|---|---|---|---|")
