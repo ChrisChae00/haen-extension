@@ -9,7 +9,7 @@ mistake it was matters more than when it happened.
 
 ---
 
-## 1. When the instrument lied (9 cases)
+## 1. When the instrument lied (10 cases)
 
 Cases where the benchmark itself had to be doubted before its conclusions could be trusted. Every
 one of them **exited cleanly, and the result files looked fine**. That is why tests did not catch them.
@@ -109,12 +109,28 @@ milliseconds → resume skips the rows already on disk → permanent contaminati
 - **Result**: 3.7-flash cost/1k corrected from $1.7 → **$3.02**. The teacher-data budget had nearly
   been set at half of what it should be
 
+### 1.10 The fix for 1.9 recorded "unmeasured" as "zero"
+
+- **Symptom**: 10 of 424 records in the `gemini-3.7-flash` run carry `reasoning_tokens: 0` with no
+  error and a full hypothesis, while the other 414 have a minimum of 16 and a median of 315
+- **Cause**: when the response carried no `total_tokens`, `total − prompt − completion` became a
+  large negative and the `Math.max(0, …)` guard clamped it to 0. **The guard that stopped a
+  nonsense number also erased the fact that there was no number**
+- **Fix**: prefer the provider's explicit `completion_tokens_details.reasoning_tokens`; derive only
+  when `total_tokens` is present; record `null` otherwise. `score.py` reports `reasoningTotal: None`
+  when nothing was measured and marks the cost a lower bound when anything was not — the same
+  None-not-zero rule already used for `streamFallbackRate` in 1.1
+- **Result**: the published $3.0176 is a floor, understated ~4%. Every pre-field run's cost now
+  carries `≥` in `bench/REPORT.md`, because the column had been mixing two definitions of "cost"
+
 ### Shared lessons
 
-1. **A clean exit is not evidence of correctness.** Zero of the 9 cases above produced a crash
+1. **A clean exit is not evidence of correctness.** Zero of the 10 cases above produced a crash
 2. Where a failure is recorded determines the lifetime of the data. In a system with resume logic,
    **a wrongly recorded failure is permanent**
 3. When folding metrics into one, make the folding visible in the name, and use the worst value
+4. **A guard against a wrong value must not become a claim.** 1.10 is 1.9's fix producing 1.9's bug
+   one level down: `0` for "not measured" is a statement about the model, and it is false
 
 ---
 

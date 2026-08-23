@@ -15,7 +15,7 @@
   "datasets": ["flores.jsonl", "handbuilt.jsonl"],
   "limit": 212,
 
-  "runs": 1,
+  "runs": 3,
   "concurrency": 1,
 
   "judgeModelId": "anthropic/claude-sonnet-5",

@@ -41,7 +41,7 @@ Built with a focus on performance, reliability, and user experience, Haen showca
   groundedness, which is now the fine-tuning target rather than a serving default.
 - **Fast Test Suite**: Zero-dependency `node --test` suite covering the 15 schema and Hanja compliance rules
   plus reasoning-model output parsing, pool pacing, and the key-rotation / run-stop logic that decides
-  whether a benchmark keeps recording — **36 tests in ~150ms**.
+  whether a benchmark keeps recording — **40 tests in ~160ms**.
 
 ---
 

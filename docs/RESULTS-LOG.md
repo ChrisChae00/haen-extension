@@ -77,7 +77,7 @@ to be correct. Both directions × 10 items each for casual/business.
 Validation of the effect: the teacher candidate's `nuanceGrounded` was an ambiguous 75% at n=12 but
 settled at **95%** at n=40 — the 12-item judgement really had been sampling noise.
 
-### 4. Purpose-built benchmark harness — 9 measurement-reliability defects found and fixed
+### 4. Purpose-built benchmark harness — 10 measurement-reliability defects found and fixed
 
 Cases of doubting the instrument before trusting its readings. Every one was already contaminating
 real data or about to:

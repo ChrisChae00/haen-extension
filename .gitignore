@@ -57,3 +57,5 @@ bench/results_archive/
 # and describe what to do next, not what happened - the record that outlives them lives
 # in docs/*.md, which is committed.
 /docs/local/
+
+__pycache__/

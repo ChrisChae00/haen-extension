@@ -162,6 +162,35 @@ were clean after all.
 
 ---
 
+## 5. Ten items recorded as thinking nothing when the provider sent no total
+
+Found in review of the thinking-budget work, after the `gemini-3.7-flash` run was published.
+
+`reasoning_tokens` is derived as `total − prompt − completion`. When Google's response carried no
+`total_tokens`, that expression became `0 − prompt − completion`, a large negative, and the
+`Math.max(0, …)` guard clamped it to **0** — indistinguishable from a model that genuinely thought
+nothing.
+
+It happened. In `bench/results/20260821T181157-gemini-3.7-flash/predictions.jsonl`, **10 of 424
+records** carry `reasoning_tokens: 0` with no error and a full hypothesis, while the other 414 have
+a minimum of 16 and a median of 315. All ten are missing `total_tokens`.
+
+- **Fix**: prefer the provider's explicit `completion_tokens_details.reasoning_tokens`; derive the
+  gap only when `total_tokens` is present; record `null` — not `0` — when it is not.
+  `score.py` sums what is known, counts what is not, and marks the cost a lower bound
+- **Not recoverable**: `total_tokens` was never persisted, so those ten cannot be re-derived from
+  disk. Only a re-run of those items would settle them
+- **Impact on the published number**: the run's `reasoningTotal 72,667` and `$3.0176` are floors,
+  understated by roughly 3,150 tokens (~4%). Left as a marked lower bound rather than re-measured —
+  a 4% correction is not worth a row measured half in August and half later
+
+The same mechanism means every run predating the field (`qwen3.6-27b`, both `gpt-oss` rows,
+`gemini-3.5-flash-lite`, `qwen3-14b-local`) now reports `reasoningTotal: None` instead of `0`, and
+their costs carry the `≥` mark in `bench/REPORT.md`. **The cost column is not rankable across
+marked and unmarked rows.**
+
+---
+
 ## Related open issue (out of scope here)
 
 **No timeout on reading the stream body** — the 30-second timeout at `src/apiClient.js:235` only

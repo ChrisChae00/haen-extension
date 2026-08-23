@@ -94,22 +94,55 @@ test('a rate limit on the last key ends the run rather than failing every remain
 // body. A stand-in that reports one response with the usage the provider sent.
 const apiReporting = usage => ({
   async translate(text, opts) {
+    seenOpts = opts;
     const raw = JSON.stringify({ natural: 'hi', nuance: 'n', alternatives: [] });
     opts.onRaw?.(raw, usage, { ttfbMs: 10 });
     return JSON.parse(raw);
   },
 });
+let seenOpts = null;
 
 test('hidden thinking tokens are derived from the reported total', async () => {
-  // Google's OpenAI-compatible endpoint reports a total that exceeds prompt +
-  // completion for reasoning models; the gap is thinking, and it bills as output.
-  const translate = makeHaenProvider(CONFIG, apiReporting({ prompt_tokens: 753, completion_tokens: 319, total_tokens: 1394 }));
+  // The gemini-3.7-flash response that started this: total exceeds prompt + completion,
+  // and the gap is thinking, which bills as output.
+  const translate = makeHaenProvider(CONFIG, apiReporting({ prompt_tokens: 23, completion_tokens: 592, total_tokens: 1522 }));
   const record = await translate(item);
-  assert.equal(record.usage.reasoning_tokens, 322);
+  assert.deepEqual(record.usage, { prompt_tokens: 23, completion_tokens: 592, reasoning_tokens: 907 });
 });
 
 test('models that hide nothing report zero reasoning tokens', async () => {
   const translate = makeHaenProvider(CONFIG, apiReporting({ prompt_tokens: 23, completion_tokens: 451, total_tokens: 474 }));
   const record = await translate(item);
   assert.equal(record.usage.reasoning_tokens, 0);
+});
+
+test('an explicit reasoning_tokens field wins over the derived gap', async () => {
+  const translate = makeHaenProvider(CONFIG, apiReporting({
+    prompt_tokens: 23, completion_tokens: 592, total_tokens: 1522,
+    completion_tokens_details: { reasoning_tokens: 900 },
+  }));
+  const record = await translate(item);
+  assert.equal(record.usage.reasoning_tokens, 900);
+});
+
+test('a response with no total_tokens records null, not zero', async () => {
+  // 0 would claim the model thought nothing. Clamping 0 - prompt - completion to zero is
+  // exactly how ten gemini-3.7-flash items were recorded as thoughtless; unmeasured is
+  // null so score.py can mark the cost a lower bound instead of publishing it as final.
+  const translate = makeHaenProvider(CONFIG, apiReporting({ prompt_tokens: 744, completion_tokens: 325 }));
+  const record = await translate(item);
+  assert.equal(record.usage.reasoning_tokens, null);
+});
+
+test('reasoningEffort reaches the request only when the config sets it', async () => {
+  // Four hand-written destructuring sites carry this from config to the request body.
+  // Drop it at any of them and the run completes, scores, and publishes a row labelled
+  // "-nothink" that thought the whole time.
+  seenOpts = null;
+  await makeHaenProvider({ ...CONFIG, reasoningEffort: 'none' }, apiReporting({}))(item);
+  assert.equal(seenOpts.reasoningEffort, 'none');
+
+  seenOpts = null;
+  await makeHaenProvider(CONFIG, apiReporting({}))(item);
+  assert.equal('reasoningEffort' in seenOpts, false);
 });

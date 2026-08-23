@@ -295,9 +295,10 @@ export class TranslatorAPI {
           // makes the serving stack a recorded constant instead of a hidden variable.
           ...(provider === 'openrouter' && providerRouting ? { provider: providerRouting } : {}),
           // Benchmark-only. Reasoning models spend most of their wall clock thinking:
-          // qwen3:14b measured ~30s of the ~47s per item there, with prefill at 3.4s.
-          // "none" turns it off where the backend honours it (Ollama does), which is the
-          // only lever that touches the one axis the local model actually loses on.
+          // decomposing qwen3:14b's 43s per item gave thinking 23.9s (59%), decode 17.1s
+          // and prefill only 3.2s (docs/ENGINEERING-LOG.md 2.4). "none" turns it off where
+          // the backend honours it (Ollama does), and it is the only lever that moves
+          // latency - but not a free one: it costs tipFactual 91.7% -> 66.7% (n=12, 3).
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           stream: useStream,
           // OpenAI-compatible streaming omits `usage` unless asked; without it every

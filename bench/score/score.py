@@ -149,10 +149,18 @@ def operational(records, config, pricing):
     ttfb = sorted(r["ttfbMs"] for r in records if r.get("ttfbMs") is not None)
     prompt_toks = sum((r.get("usage") or {}).get("prompt_tokens", 0) for r in records)
     completion_toks = sum((r.get("usage") or {}).get("completion_tokens", 0) for r in records)
-    # Thinking tokens bill as output. Providers that hide them from completion_tokens
-    # (Google does; Groq does not) would otherwise report a reasoning model at half its
-    # real cost. Older runs have no such field and read as 0, which is correct for them.
-    reasoning_toks = sum((r.get("usage") or {}).get("reasoning_tokens", 0) for r in records)
+    # Thinking tokens bill as output. A provider that hides them from completion_tokens
+    # (Google does) would otherwise report a reasoning model at half its real cost.
+    #
+    # A record is *unmeasured* when it predates the field, or when the provider sent no
+    # total_tokens to derive it from (bench/src/providers/haen.js writes null there).
+    # Those must not read as 0: 0 means "this model thought nothing", which is a claim
+    # the data does not support, and it is the same understatement 1.9 was filed for.
+    # Sum what is known, count what is not, and let the cost carry a lower-bound mark.
+    usages = [r.get("usage") or {} for r in records]
+    reasoning_vals = [u.get("reasoning_tokens") for u in usages]
+    reasoning_unmeasured = sum(1 for v in reasoning_vals if v is None)
+    reasoning_toks = sum(v for v in reasoning_vals if v is not None)
     n = len(records)
 
     errors = defaultdict(int)
@@ -165,11 +173,17 @@ def operational(records, config, pricing):
     # A local model legitimately has 0 tokens billed. A hosted model with 0 tokens means
     # usage never came back (e.g. a streaming response with no stream_options.include_usage)
     # - reporting $0.0000 for that would read as "free" instead of "unmeasured".
+    cost_lower_bound = False
     if config.get("provider") == "ollama":
         cost_per_1k = 0.0
     elif price and n and (prompt_toks or completion_toks):
         per_item = (prompt_toks / n / 1e6) * price["inputPer1M"] + ((completion_toks + reasoning_toks) / n / 1e6) * price["outputPer1M"]
         cost_per_1k = round(per_item * 1000, 4)
+        # Any unmeasured record contributed 0 thinking tokens to the output charge, so
+        # the figure can only be too low. Marked rather than hidden: without it the
+        # cross-model table in REPORT.md puts costs computed to two different
+        # definitions in one column and nothing says which is which.
+        cost_lower_bound = reasoning_unmeasured > 0
 
     return {
         "latencyMs": {"p50": percentile(lat, 0.50), "p90": percentile(lat, 0.90), "p99": percentile(lat, 0.99)},
@@ -179,14 +193,17 @@ def operational(records, config, pricing):
             "completionTotal": completion_toks,
             "promptMean": round(prompt_toks / n, 1) if n else None,
             "completionMean": round(completion_toks / n, 1) if n else None,
-            # Hidden thinking tokens, derived from the total the provider reports. Zero
-            # for non-reasoning models and for providers that already fold them into
-            # completion_tokens, so a non-zero value means "this model thinks and bills
-            # for it where you cannot see it".
-            "reasoningTotal": reasoning_toks,
-            "reasoningMean": round(reasoning_toks / n, 1) if n else None,
+            # Hidden thinking tokens. Zero for non-reasoning models and for providers
+            # that already fold them into completion_tokens, so a non-zero value means
+            # "this model thinks and bills for it where you cannot see it". None when
+            # no record measured it at all - a run that predates the field cannot
+            # distinguish a model that does not think from one that was never counted.
+            "reasoningTotal": None if reasoning_unmeasured == n else reasoning_toks,
+            "reasoningMean": None if reasoning_unmeasured == n or not n else round(reasoning_toks / n, 1),
+            "reasoningUnmeasured": reasoning_unmeasured,
         },
         "costPer1kTranslations": cost_per_1k,
+        "costIsLowerBound": cost_lower_bound,
         "pricesFetchedAt": price["fetchedAt"] if price else ("n/a (local)" if config.get("provider") == "ollama" else None),
         "failureRate": round(sum(errors.values()) / n, 4) if n else None,
         "errorsByType": dict(errors),
@@ -350,7 +367,19 @@ def write_report(m, path):
     if op.get('ttfbMs'):
         L.append(f"| streaming TTFB p50 / p90 / p99 | {op['ttfbMs']['p50']} / {op['ttfbMs']['p90']} / {op['ttfbMs']['p99']} ms |")
     L.append(f"| mean tokens in / out | {op['tokens']['promptMean']} / {op['tokens']['completionMean']} |")
-    L.append(f"| cost per 1,000 translations | {'—' if op['costPer1kTranslations'] is None else '$' + format(op['costPer1kTranslations'], '.4f')} |")
+    # Thinking tokens are billed as output but are not inside completionMean, so without
+    # this row the cost below cannot be reconciled against the token counts above.
+    rm = op['tokens'].get('reasoningMean')
+    unmeasured = op['tokens'].get('reasoningUnmeasured') or 0
+    if rm is not None:
+        note = f" ({unmeasured} items unmeasured)" if unmeasured else ""
+        L.append(f"| mean hidden thinking tokens | {rm}, billed as output{note} |")
+    elif unmeasured:
+        L.append("| mean hidden thinking tokens | — (not recorded by this run) |")
+    cost = '—' if op['costPer1kTranslations'] is None else '$' + format(op['costPer1kTranslations'], '.4f')
+    if op.get('costIsLowerBound'):
+        cost += " **(lower bound — thinking tokens unmeasured)**"
+    L.append(f"| cost per 1,000 translations | {cost} |")
     L.append(f"| **prices as of** | **{op['pricesFetchedAt'] or 'UNKNOWN — no pricing row'}** |")
     L.append(f"| failure rate | {pct(op['failureRate'])} |")
     L.append(f"| retry rate | {pct(op['retryRate'])} |")
