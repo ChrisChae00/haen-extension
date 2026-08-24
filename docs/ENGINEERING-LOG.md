@@ -236,6 +236,19 @@ tuning goal from "get nuance to 27B level" to **"as good as thinking, without th
   (casual 15/20). The judge's notes pinpointed the cause: alternatives listed in the source language,
   and two categories at the same register. **Wrong outputs have to be filtered out of the training
   data** — whatever is learned comes back out
+- **Cross-judge agreement has to be measured where the scores are low, not where they are high** —
+  20 items were re-judged by a second judge (`openai/gpt-5.6-sol`) against the fixed
+  `anthropic/claude-sonnet-5`. On the teacher's near-perfect output the two agreed 92.5%, which
+  reads as "the judge is sound". On the student's output they agreed **66.2%**, and on
+  `nuanceGrounded` — the primary tuning target — **50%**: 25% vs 75% on the same 20 items. The
+  ceiling had hidden it. Had only the teacher been cross-judged, the conclusion would have been
+  the opposite of the truth
+- **That disagreement is a missing threshold, not a coin flip** — the two judges' notes say the same
+  thing about the same items ("generic", "doesn't specify register or relationship", "다소 포괄적")
+  and then split on whether that is a pass. `nuanceGrounded` never defines how specific is specific
+  enough. Consequence: a fixed judge still measures a before/after delta honestly (one threshold,
+  applied consistently, and sonnet is the stricter of the two), but **an absolute rate is not a
+  property of the model**, and a target written as "≥ 83%" means nothing once the judge changes
 
 ---
 
@@ -249,4 +262,6 @@ tuning goal from "get nuance to 27B level" to **"as good as thinking, without th
 | Measurement (~2026-08-19) | 5 models × 212 items. 2 hypotheses disproved, 8 instrument defects fixed |
 | Speed (2026-08-21) | Latency decomposition → thinking removed → latency −60%, TTFB −98% |
 | Teacher selection (2026-08-22) | gemini-3.7-flash measured and judged → chosen. Judge sample grown 12 → 52 |
+| Student at n=40 (2026-08-24) | Student judged on the idiom set. The gap is far wider than n=12 showed: `naturalFluent` 100% → **70%**, `nuanceGrounded` 41.7% → **30%**. On idioms the translation itself breaks, not only the explanation |
+| Judge validation (2026-08-24) | Cross-judge on 20 items. Teacher 92.5% agreement, **student 66.2%**, `nuanceGrounded` 50%. The rubric has no pass threshold |
 | Next | LoRA distillation — "as good as thinking, without thinking" |

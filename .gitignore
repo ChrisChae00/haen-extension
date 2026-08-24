@@ -52,6 +52,9 @@ bench/datasets/train/raw.jsonl
 bench/results/
 # Same for runs pulled out of the comparison (dead model, failed run) but kept on disk.
 bench/results_archive/
+# Re-judging an existing run with a second judge, to measure judge agreement. Same shape
+# as a run dir but not a run: the report must never read it as one.
+bench/xjudge/
 # Local-only working notes: handoffs, investigation memos, session state.
 # Deliberately not committed - these are scratch context for whoever picks the work up
 # next, not project documentation, and they go stale the moment they are.
