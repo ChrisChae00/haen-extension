@@ -42,20 +42,46 @@ def main():
     if not runs:
         sys.exit("No metrics.json found under bench/results/. Run src/run.js then score/score.py first.")
 
+    # A run on a different dataset is not another model row. Folding
+    # gemini-3.7-flash-ext (40 idiom items) into the matrix put its COMET 0.8336
+    # beside the 212-item rows and read as "this model is the worst", when it is
+    # only the documented fact that idioms share little surface with the reference.
+    # Group by dataset checksum; the largest group is the comparison matrix and the
+    # rest are judge-only runs that appear in the judge table alone.
+    groups = {}
+    for r in runs:
+        key = tuple(sorted(((r.get("config") or {}).get("datasetChecksums") or {}).items()))
+        groups.setdefault(key, []).append(r)
+    primary_key = max(groups, key=lambda k: len(groups[k]))
+    primary = groups[primary_key]
+    aside = [r for k, g in groups.items() if k != primary_key for r in g]
+
     lines = []
     lines.append("# Haen Benchmark Report — Consolidated Results\n")
     lines.append("> Measured from `bench/results/*/metrics.json`. Every number below traces back to a")
     lines.append("> real run - see the `git sha` / `prompt hash` columns to reproduce it.\n")
 
-    names = ", ".join(sorted({r["config"].get("name", r["config"].get("modelId", "?")) for r in runs}))
-    lines.append(f"Benchmarked **{len(runs)} model(s)**: {names}.\n")
+    names = ", ".join(sorted({r["config"].get("name", r["config"].get("modelId", "?")) for r in primary}))
+    lines.append(f"Benchmarked **{len(primary)} model(s)**: {names}.\n")
+    if aside:
+        detail = "; ".join(
+            f"`{(r.get('config') or {}).get('name', '?')}` on "
+            + ", ".join((r.get("config") or {}).get("datasets") or ["?"])
+            for r in aside
+        )
+        lines.append(
+            f"> **{len(aside)} run(s) sit outside this matrix** ({detail}). They were measured on a "
+            "different dataset, so their COMET and compliance numbers answer a different question and "
+            "are not model rows. They appear in the judge table below, where the `n` column says what "
+            "each was scored on.\n"
+        )
 
     lines.append("## Model Benchmark Comparison Matrix\n")
     lines.append("| Model | Provider | n (items × runs) | Compliance (worst rule) | COMET (95% CI) | chrF++ | Latency (p50/p90/p99) | Streaming TTFB (p50) | Cost / 1k | Prices as of |")
     lines.append("|---|---|---|---|---|---|---|---|---|---|")
 
     lower_bound_rows = []
-    for r in runs:
+    for r in primary:
         c = r.get("config", {})
         op = r.get("operational", {})
         comp = r.get("compliance", {})
@@ -123,7 +149,7 @@ def main():
     # completion_tokens report reasoning_tokens 0 whether the lever worked or was dropped.
     effort_rows = sorted(
         f"{(r.get('config') or {}).get('name', '?')} (`{(r.get('config') or {}).get('reasoningEffort')}`)"
-        for r in runs if (r.get("config") or {}).get("reasoningEffort")
+        for r in primary if (r.get("config") or {}).get("reasoningEffort")
     )
     if effort_rows:
         lines.append(
@@ -135,7 +161,7 @@ def main():
     lines.append("## Determinism & Reproducibility\n")
     lines.append("| Model | identical output rate | chrF++ stdev (tie threshold) | failure rate | retry rate | git sha | prompt hash |")
     lines.append("|---|---|---|---|---|---|---|")
-    for r in runs:
+    for r in primary:
         c = r.get("config", {})
         op = r.get("operational", {})
         var = r.get("runVariance", {})
@@ -153,8 +179,8 @@ def main():
         phash = (c.get("promptHash") or "?")[:12]
         lines.append(f"| {name} | {identical} | {tie} | {pct(op.get('failureRate'))} | {pct(op.get('retryRate'))} | {sha_cell} | `{phash}…` |")
 
-    shas = {((r.get("config") or {}).get("git") or {}).get("sha") for r in runs}
-    dirty = sorted((r.get("config") or {}).get("name", "?") for r in runs
+    shas = {((r.get("config") or {}).get("git") or {}).get("sha") for r in primary}
+    dirty = sorted((r.get("config") or {}).get("name", "?") for r in primary
                    if ((r.get("config") or {}).get("git") or {}).get("dirty"))
     lines.append("")
     if len(shas) > 1 or dirty:
@@ -162,7 +188,7 @@ def main():
         # were not: a parser fix or a routing change between two runs moves the compliance
         # and latency columns without the model changing at all.
         lines.append("> **These rows were not all measured by the same code.** "
-                     f"{len(shas)} distinct git sha(s) across {len(runs)} run(s)"
+                     f"{len(shas)} distinct git sha(s) across {len(primary)} run(s)"
                      + (f"; dirty working tree for {', '.join(dirty)}" if dirty else "")
                      + ". A dirty tree means the recorded sha is a lower bound, not the code that ran.")
         lines.append("> Before reading a cross-model delta off this table, check that no run predates")
@@ -196,7 +222,11 @@ def main():
                          ", ".join(f"`{i}`" for i in sorted(judge_ids)) +
                          "). The numbers are not comparable to each other until they are.\n")
         else:
-            lines.append(f"> Judge: `{judge_ids.pop()}`, binary rubric, same subset for every model.")
+            # "same subset for every model" stopped being true the moment a judge-only
+            # run on another dataset joined this table. The n column already carries the
+            # answer, so point at it instead of guaranteeing something the table breaks.
+            lines.append(f"> Judge: `{judge_ids.pop()}`, binary rubric. **Rows are not all scored on the "
+                         "same items** - read the `n` column, and compare only rows that share it.")
             lines.append("> Judge scores carry the judge's own biases and are for relative comparison")
             lines.append("> between the models in this table only.\n")
 
