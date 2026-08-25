@@ -249,6 +249,21 @@ tuning goal from "get nuance to 27B level" to **"as good as thinking, without th
   enough. Consequence: a fixed judge still measures a before/after delta honestly (one threshold,
   applied consistently, and sonnet is the stricter of the two), but **an absolute rate is not a
   property of the model**, and a target written as "≥ 83%" means nothing once the judge changes
+- **Writing the threshold into the rubric did not fix it, and a $0.38 probe said so before $1.56 was
+  spent** (2026-08-25). `nuanceGrounded` was rewritten around an operational swap test - *could this
+  nuance be pasted onto an unrelated sentence without becoming wrong? then it fails* - and re-judged
+  by both judges on the same 20 student items. Agreement moved 53% → 58%: both judges got stricter
+  (sonnet 26% → 5%, sol 74% → 47%) without converging, leaving the same ~42-point gap. Editing the
+  rubric changes `rubricHash`, which invalidates every cached verdict in the repository, so the full
+  price of that change was 164 re-judged items ≈ $1.56. **Validate the fix on the smallest sample
+  that can show the effect before paying for the whole thing.** The rubric was reverted, keeping all
+  nine runs' cached verdicts valid
+- **The right instrument for a tuning question is pairwise, not absolute** — the disagreement is
+  about where "specific enough" sits on a continuum, and no wording pins that down across judges.
+  But the question the tuning track actually asks is *"is the tuned output better than the baseline
+  output on this item"*, which a judge can answer by comparing two outputs side by side without
+  ever locating a threshold. Absolute rates stay for the cross-model table, where they are read as
+  ranks; the before/after claim moves to a paired A/B judge
 
 ---
 

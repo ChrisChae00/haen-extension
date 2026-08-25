@@ -11,8 +11,11 @@ docs/                       ← committed. The long-lived record
   MEASUREMENT-NOTES.md      how the measurement-accuracy problems were found, and the reasoning behind each call
   EXTENSION-AUDIT.md        extension pre-ship audit (2026-07, before the design overhaul)
   local/                    ← .gitignore'd. Working documents, refreshed every session
-    HANDOFF.md              **for resuming only** — current state, next command, environment traps.
-                            Finished work moves out to ENGINEERING-LOG so the length stays constant
+    AGENT-ONBOARDING.md     **read this first if you are an agent** — measurement discipline,
+                            how this repo records work, environment traps, what not to do
+    HANDOFF.md              **for resuming only** — current state, blocking items, next command.
+                            Finished work moves out so the length stays constant
+    HANDOFF-DONE.md         what was finished and when, newest first (dated from 2026-08-25 on)
     FINETUNING.md           improvement-track plan — goal, teacher selection, training procedure, open decisions
     EVIDENCE.md             full-repo survey snapshot (file:line citations)
 ```
@@ -30,7 +33,8 @@ Other records in the repository:
 ## Where to start
 
 - **Curious about outcomes and numbers** → `RESULTS-LOG.md`
-- **What to do next** → `local/FINETUNING.md` §12.8
+- **Starting a session as an agent** → `local/AGENT-ONBOARDING.md`, then `local/HANDOFF.md`
+- **What to do next** → `local/HANDOFF.md` §2 (blocking items)
 - **What went wrong and how it was fixed** → `ENGINEERING-LOG.md`
 - **Why it was measured this way** → `MEASUREMENT-NOTES.md` (the first four cases in detail)
 - **What the numbers are right now** → `bench/REPORT.md` ← **on any conflict, this one is current**
@@ -42,6 +46,8 @@ Other records in the repository:
 2. At the end of every piece of work, record (a) why it was done (b) before/after numbers
    (c) the next plan. Numbers come with their **confidence limits** (sample size, run count, CI) —
    that is what makes them defensible later
-3. `local/` is never committed. The point is to keep plan documents from piling up permanently in
+3. **Date what you add from 2026-08-25 on.** New entries in `local/HANDOFF-DONE.md` carry a
+   `YYYY-MM-DD`; older entries were not back-dated
+4. `local/` is never committed. The point is to keep plan documents from piling up permanently in
    the repository; when something earns a permanent place, promote it into a committed document
    under `docs/`
