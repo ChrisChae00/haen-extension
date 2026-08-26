@@ -41,6 +41,10 @@ bench/.venv/
 bench/.cache/
 # derived + seed-pinned; regenerate byte-identically with `npm run sample-flores`
 bench/datasets/*/flores.jsonl
+# distillation training sentences; regenerate byte-identically with `npm run sample-flores-train`
+bench/datasets/train/raw.jsonl
+# paid teacher batch state, raw responses, and derived train/valid files
+bench/datasets/train/teacher/
 #
 # Raw run output stays local and is NOT committed - predictions.jsonl for the full set
 # across every model is large and churns. Keep it on disk forever regardless: re-scoring
@@ -50,6 +54,9 @@ bench/datasets/*/flores.jsonl
 bench/results/
 # Same for runs pulled out of the comparison (dead model, failed run) but kept on disk.
 bench/results_archive/
+# Re-judging an existing run with a second judge, to measure judge agreement. Same shape
+# as a run dir but not a run: the report must never read it as one.
+bench/xjudge/
 # Local-only working notes: handoffs, investigation memos, session state.
 # Deliberately not committed - these are scratch context for whoever picks the work up
 # next, not project documentation, and they go stale the moment they are.

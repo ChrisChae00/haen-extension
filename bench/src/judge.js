@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { TranslatorAPI } from '../../src/apiClient.js';
 import { loadDataset } from './dataset.js';
 
@@ -44,6 +45,19 @@ Respond with ONLY this JSON object, no prose and no code fences:
 
 const CRITERIA = ['naturalFluent', 'nuanceGrounded', 'altsDistinct', 'tipFactual'];
 const DEFAULT_SUBSET = 50;
+const PAIRWISE_CRITERIA = ['natural', 'nuance'];
+const PAIRWISE_CACHE_VERSION = 2;
+
+const PAIRWISE_RUBRIC = `You are comparing two Korean-English translation assistant outputs for one source sentence.
+
+Judge the two criteria independently. For each, choose exactly one of "A", "B", or "tie".
+Choose "tie" when neither output is clearly better or the difference is too small to call.
+
+- natural: which output's "natural" translation is more fluent, idiomatic, and faithful in the target language?
+- nuance: which output's "nuance" is more specific and accurate for this sentence's register, speaker relationship, or real use? Generic filler loses to a grounded explanation.
+
+Respond with ONLY this JSON object, no prose and no code fences:
+{"natural":"A|B|tie","nuance":"A|B|tie","note":"one short sentence"}`;
 
 // Cache invalidation key. score.py's scoring must be deterministic (run it twice, get
 // identical numbers), which is why judge.jsonl is never re-requested for an id already
@@ -54,13 +68,14 @@ const DEFAULT_SUBSET = 50;
 const RUBRIC_HASH = createHash('sha256').update(RUBRIC).digest('hex');
 
 function parseArgs(argv) {
-  const args = { runDir: null, limit: DEFAULT_SUBSET };
+  const args = { runDir: null, baselineRunDir: null, limit: DEFAULT_SUBSET };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--run-dir') args.runDir = argv[++i];
+    else if (argv[i] === '--baseline-run-dir') args.baselineRunDir = argv[++i];
     else if (argv[i] === '--limit') args.limit = Number(argv[++i]);
     else throw new Error(`Unknown argument: ${argv[i]}`);
   }
-  if (!args.runDir) throw new Error('Usage: node src/judge.js --run-dir results/<run-id> [--limit 50]');
+  if (!args.runDir) throw new Error('Usage: node src/judge.js --run-dir results/<run-id> [--baseline-run-dir results/<run-id>] [--limit 50]');
   return args;
 }
 
@@ -90,10 +105,192 @@ function extractVerdict(raw) {
   return { scores, note: typeof parsed.note === 'string' ? parsed.note : '' };
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const runDir = path.resolve(args.runDir);
-  const config = JSON.parse(readFileSync(path.join(runDir, 'config.json'), 'utf8'));
+function extractPairwiseVerdict(raw) {
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error(`judge returned no JSON object: ${raw.slice(0, 120)}`);
+  const parsed = JSON.parse(match[0]);
+  const choices = {};
+  for (const criterion of PAIRWISE_CRITERIA) {
+    if (!['A', 'B', 'tie'].includes(parsed[criterion])) {
+      throw new Error(`judge omitted ${criterion} choice A, B, or tie`);
+    }
+    choices[criterion] = parsed[criterion];
+  }
+  return { ...choices, note: typeof parsed.note === 'string' ? parsed.note : '' };
+}
+
+export function normalizeOrderVerdict(verdict, candidatePosition) {
+  if (!['A', 'B'].includes(candidatePosition)) throw new Error('candidate position must be A or B');
+  const baselinePosition = candidatePosition === 'A' ? 'B' : 'A';
+  return Object.fromEntries(PAIRWISE_CRITERIA.map(criterion => {
+    const choice = verdict[criterion];
+    if (!['A', 'B', 'tie'].includes(choice)) throw new Error(`invalid ${criterion} choice`);
+    return [criterion, choice === 'tie' ? 'tie' : choice === candidatePosition ? 'candidate' : baselinePosition === choice ? 'baseline' : 'tie'];
+  }));
+}
+
+export function finalizePairwiseVerdicts(first, second) {
+  return Object.fromEntries(PAIRWISE_CRITERIA.map(criterion => {
+    const winner = first[criterion] === second[criterion] && ['candidate', 'baseline'].includes(first[criterion])
+      ? first[criterion]
+      : 'tie';
+    return [criterion, winner];
+  }));
+}
+
+export function exactSignTestPValue(wins, losses) {
+  if (!Number.isInteger(wins) || !Number.isInteger(losses) || wins < 0 || losses < 0) {
+    throw new Error('wins and losses must be non-negative integers');
+  }
+  const total = wins + losses;
+  if (total === 0) return 1;
+  const smaller = Math.min(wins, losses);
+  let probability = 2 ** -total;
+  let tail = probability;
+  for (let k = 0; k < smaller; k++) {
+    probability *= (total - k) / (k + 1);
+    tail += probability;
+  }
+  return Math.min(1, 2 * tail);
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function hashComparison(input) {
+  return createHash('sha256').update(stableJson(input)).digest('hex');
+}
+
+const datasetIdentity = config => ({
+  datasetVersion: config.datasetVersion,
+  datasets: config.datasets,
+  datasetChecksums: config.datasetChecksums,
+});
+
+export function validateComparableConfigs(candidateConfig, baselineConfig, candidateDirName, baselineDirName) {
+  if (candidateConfig.runId !== candidateDirName) {
+    throw new Error(`candidate config runId ${JSON.stringify(candidateConfig.runId)} does not match directory ${JSON.stringify(candidateDirName)}`);
+  }
+  if (baselineConfig.runId !== baselineDirName) {
+    throw new Error(`baseline config runId ${JSON.stringify(baselineConfig.runId)} does not match directory ${JSON.stringify(baselineDirName)}`);
+  }
+  if (candidateConfig.runId === baselineConfig.runId) throw new Error('candidate and baseline runId must differ');
+  if (stableJson(datasetIdentity(candidateConfig)) !== stableJson(datasetIdentity(baselineConfig))) {
+    throw new Error('candidate and baseline config dataset identity differs');
+  }
+}
+
+function outputForJudge(record) {
+  return record.parsed ?? { raw: record.raw ?? '' };
+}
+
+function buildPairwiseUserMessage(item, candidate, baseline, candidatePosition) {
+  const a = candidatePosition === 'A' ? candidate : baseline;
+  const b = candidatePosition === 'A' ? baseline : candidate;
+  return JSON.stringify({
+    source: item.source,
+    direction: item.direction,
+    outputA: outputForJudge(a),
+    outputB: outputForJudge(b),
+  }, null, 2);
+}
+
+function readPredictions(runDir) {
+  return readFileSync(path.join(runDir, 'predictions.jsonl'), 'utf8')
+    .split('\n').filter(Boolean).map(line => JSON.parse(line));
+}
+
+export function recordsForIds(records, idsOrItems, label) {
+  const itemsById = new Map(idsOrItems.map(item => [typeof item === 'string' ? item : item.id, item]));
+  const selected = records.filter(record => record.runIndex === 0 && record.id.startsWith('hb'));
+  const byId = new Map();
+  for (const record of selected) {
+    if (byId.has(record.id)) throw new Error(`${label} has duplicate runIndex 0 prediction for ${record.id}`);
+    const item = itemsById.get(record.id);
+    if (!item) throw new Error(`${label} item set differs: unexpected ${record.id}`);
+    if (typeof item !== 'string' && (record.direction !== item.direction || record.slice !== item.slice)) {
+      throw new Error(`${label} metadata differs for ${record.id}`);
+    }
+    if (!record.parsed) throw new Error(`${label} has no parsed output for ${record.id}`);
+    byId.set(record.id, record);
+  }
+  const missing = [...itemsById.keys()].filter(id => !byId.has(id));
+  if (missing.length) throw new Error(`${label} item set differs: missing ${missing.join(', ')}`);
+  return byId;
+}
+
+function judgeIdentity(config) {
+  return { provider: config.judgeProvider ?? config.provider, modelId: config.judgeModelId };
+}
+
+function comparisonInput({ item, candidate, baseline, candidateConfig, baselineConfig }) {
+  return {
+    cacheVersion: PAIRWISE_CACHE_VERSION,
+    id: item.id,
+    candidateRunId: candidateConfig.runId,
+    baselineRunId: baselineConfig.runId,
+    dataset: datasetIdentity(candidateConfig),
+    judge: judgeIdentity(candidateConfig),
+    rubric: PAIRWISE_RUBRIC,
+    candidateOutput: { raw: candidate.raw ?? null, parsed: candidate.parsed ?? null },
+    baselineOutput: { raw: baseline.raw ?? null, parsed: baseline.parsed ?? null },
+  };
+}
+
+export function selectPairwiseSubset(handbuilt, limit) {
+  if (limit >= handbuilt.length) return handbuilt;
+  const groups = new Map();
+  for (const item of handbuilt) {
+    const key = `${item.slice}\u0000${item.direction}`;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  const perStratum = Math.floor(limit / groups.size);
+  let remainder = limit % groups.size;
+  const selected = [];
+  for (const items of groups.values()) {
+    selected.push(...items.slice(0, perStratum + (remainder-- > 0 ? 1 : 0)));
+  }
+  return selected.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export function isCompletePairwiseRow(row) {
+  const orders = row?.orderVerdicts;
+  if (!Array.isArray(orders) || orders.length !== 2) return false;
+  const positions = new Set(orders.map(order => order.candidatePosition));
+  if (positions.size !== 2 || !positions.has('A') || !positions.has('B')) return false;
+  if (!orders.every(order => typeof order.raw === 'string' && order.verdict
+    && PAIRWISE_CRITERIA.every(criterion => ['candidate', 'baseline', 'tie'].includes(order.normalized?.[criterion])))) return false;
+  return PAIRWISE_CRITERIA.every(criterion => ['candidate', 'baseline', 'tie'].includes(row.winner?.[criterion]));
+}
+
+export function checkpointPairwiseOrder(row, candidatePosition, response) {
+  if (row.orderVerdicts.some(order => order.candidatePosition === candidatePosition)) {
+    throw new Error(`pairwise order ${candidatePosition} is already checkpointed`);
+  }
+  const normalized = normalizeOrderVerdict(response.verdict, candidatePosition);
+  const next = {
+    ...row,
+    orderVerdicts: [...row.orderVerdicts, { candidatePosition, raw: response.raw, verdict: response.verdict, normalized }]
+      .sort((a, b) => a.candidatePosition.localeCompare(b.candidatePosition)),
+  };
+  if (next.orderVerdicts.length === 2) {
+    next.winner = finalizePairwiseVerdicts(next.orderVerdicts[0].normalized, next.orderVerdicts[1].normalized);
+  }
+  return next;
+}
+
+function writePairwiseRows(outFile, rows) {
+  const tempFile = `${outFile}.${process.pid}.tmp`;
+  writeFileSync(tempFile, rows.map(row => JSON.stringify(row)).join('\n') + (rows.length ? '\n' : ''));
+  renameSync(tempFile, outFile);
+}
+
+async function mainAbsolute(args, runDir, config) {
 
   if (!config.judgeModelId) {
     throw new Error('config.judgeModelId is not set. The judge must be a model that is NOT under test.');
@@ -182,4 +379,134 @@ async function main() {
   console.log('  Judge scores are for relative comparison between models only.');
 }
 
-main().catch(e => { console.error(`\n${e.message}\n`); process.exit(1); });
+export function pairwiseSignTests(rows) {
+  const completeRows = rows.filter(isCompletePairwiseRow);
+  return Object.fromEntries(PAIRWISE_CRITERIA.map(criterion => {
+    const candidateWins = completeRows.filter(row => row.winner[criterion] === 'candidate').length;
+    const baselineWins = completeRows.filter(row => row.winner[criterion] === 'baseline').length;
+    const ties = completeRows.length - candidateWins - baselineWins;
+    return [criterion, {
+      candidateWins,
+      baselineWins,
+      ties,
+      pValue: exactSignTestPValue(candidateWins, baselineWins),
+    }];
+  }));
+}
+
+async function judgePairwiseOrder(api, item, candidate, baseline, candidatePosition, config, apiKey) {
+  let raw = '';
+  // Pairwise results are two fixed observations, not "retry until a judge agrees".
+  // `_translate` performs one fetch; the public `translate` wrapper retries transport
+  // failures, which would silently turn one order into several judge requests.
+  await api._translate(buildPairwiseUserMessage(item, candidate, baseline, candidatePosition), {
+    apiKey,
+    uiLanguage: 'ko',
+    direction: 'auto',
+    model: config.judgeModelId,
+    modelKey: 'llama4',
+    provider: config.judgeProvider ?? config.provider,
+    modelId: config.judgeModelId,
+    temperature: 0,
+    useJsonMode: true,
+    systemPromptOverride: PAIRWISE_RUBRIC,
+    onRaw: body => { raw = body; },
+  }).catch(() => {});
+  return { raw, verdict: extractPairwiseVerdict(raw) };
+}
+
+async function mainPairwise(args, runDir, candidateConfig) {
+  if (!Number.isInteger(args.limit) || args.limit < 1) throw new Error('--limit must be a positive integer');
+  const baselineRunDir = path.resolve(args.baselineRunDir);
+  const baselineConfig = JSON.parse(readFileSync(path.join(baselineRunDir, 'config.json'), 'utf8'));
+  validateComparableConfigs(candidateConfig, baselineConfig, path.basename(runDir), path.basename(baselineRunDir));
+
+  if (!candidateConfig.judgeModelId) {
+    throw new Error('config.judgeModelId is not set. The judge must be a model that is NOT under test.');
+  }
+  if (candidateConfig.judgeModelId === candidateConfig.modelId || candidateConfig.judgeModelId === baselineConfig.modelId) {
+    throw new Error('Judge must not be either model under comparison.');
+  }
+  const apiKey = candidateConfig.judgeApiKeyEnv ? process.env[candidateConfig.judgeApiKeyEnv] : process.env[candidateConfig.apiKeyEnv];
+  if (!apiKey) throw new Error(`No API key for the judge (set ${candidateConfig.judgeApiKeyEnv ?? candidateConfig.apiKeyEnv})`);
+
+  const { items, checksums } = loadDataset(candidateConfig);
+  if (stableJson(checksums) !== stableJson(candidateConfig.datasetChecksums)) {
+    throw new Error('candidate config dataset identity no longer matches the dataset files on disk');
+  }
+  const handbuilt = items.filter(item => item.id.startsWith('hb')).sort((a, b) => a.id.localeCompare(b.id));
+  if (handbuilt.length !== 40) throw new Error(`Pairwise judging requires the 40 handbuilt items, found ${handbuilt.length}`);
+  const candidateRecords = recordsForIds(readPredictions(runDir), handbuilt, 'candidate');
+  const baselineRecords = recordsForIds(readPredictions(baselineRunDir), handbuilt, 'baseline');
+  const subset = selectPairwiseSubset(handbuilt, args.limit);
+
+  const hashById = new Map(handbuilt.map(item => [item.id, hashComparison(comparisonInput({
+    item,
+    candidate: candidateRecords.get(item.id),
+    baseline: baselineRecords.get(item.id),
+    candidateConfig,
+    baselineConfig,
+  }))]));
+  const outFile = path.join(runDir, 'pairwise.jsonl');
+  const existingRows = existsSync(outFile)
+    ? readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line))
+    : [];
+  const fresh = existingRows.filter(row => hashById.get(row.id) === row.comparisonHash);
+  const stale = existingRows.length - fresh.length;
+  if (stale > 0 || !existsSync(outFile)) {
+    writePairwiseRows(outFile, fresh);
+  }
+  const cached = new Map(fresh.map(row => [row.id, row]));
+  const todo = subset.filter(item => !isCompletePairwiseRow(cached.get(item.id)));
+  if (stale) console.log(`  comparison inputs changed - dropping ${stale} stale cached verdict(s)`);
+  console.log(`  pairwise judging ${todo.length} items (${subset.length - todo.length} cached) with ${candidateConfig.judgeModelId}`);
+
+  const api = new TranslatorAPI();
+  let failures = 0;
+  for (const [index, item] of todo.entries()) {
+    try {
+      const candidate = candidateRecords.get(item.id);
+      const baseline = baselineRecords.get(item.id);
+      let row = cached.get(item.id) ?? {
+        id: item.id,
+        slice: item.slice,
+        candidateRunId: candidateConfig.runId,
+        baselineRunId: baselineConfig.runId,
+        judgeModelId: candidateConfig.judgeModelId,
+        comparisonHash: hashById.get(item.id),
+        orderVerdicts: [],
+      };
+      for (const candidatePosition of ['A', 'B']) {
+        if (row.orderVerdicts.some(order => order.candidatePosition === candidatePosition)) continue;
+        row = checkpointPairwiseOrder(
+          row,
+          candidatePosition,
+          await judgePairwiseOrder(api, item, candidate, baseline, candidatePosition, candidateConfig, apiKey),
+        );
+        cached.set(item.id, row);
+        writePairwiseRows(outFile, [...cached.values()]);
+      }
+    } catch (error) {
+      failures++;
+      console.error(`    ${item.id}: ${error.message}`);
+    }
+    if ((index + 1) % 10 === 0) process.stdout.write(`\r  ${index + 1}/${todo.length}`);
+  }
+  const tests = pairwiseSignTests(subset.map(item => cached.get(item.id)).filter(Boolean));
+  console.log(`\r  done. ${todo.length - failures} judged, ${failures} failed -> ${outFile}`);
+  for (const [criterion, result] of Object.entries(tests)) {
+    console.log(`  ${criterion}: candidate ${result.candidateWins}, baseline ${result.baselineWins}, ties ${result.ties}, exact sign-test p=${result.pValue}`);
+  }
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const runDir = path.resolve(args.runDir);
+  const config = JSON.parse(readFileSync(path.join(runDir, 'config.json'), 'utf8'));
+  if (args.baselineRunDir) return mainPairwise(args, runDir, config);
+  return mainAbsolute(args, runDir, config);
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(error => { console.error(`\n${error.message}\n`); process.exit(1); });
+}
