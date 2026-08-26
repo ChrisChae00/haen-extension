@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   checkpointPairwiseOrder,
   exactSignTestPValue,
+  extractPairwiseVerdict,
   finalizePairwiseVerdicts,
   hashComparison,
   isCompletePairwiseRow,
@@ -54,6 +55,13 @@ test('comparison hash changes when either full output or rubric changes', () => 
   assert.notEqual(hashComparison(input), hashComparison({ ...input, judge: { provider: 'openrouter', modelId: 'other-judge' } }));
 });
 
+test('a pairwise verdict survives a reasoning block that contains braces', () => {
+  const verdict = '{"natural":"A","nuance":"tie","note":"ok"}';
+  const parsed = extractPairwiseVerdict(`<think>weigh A: {"natural":"B"} then B</think>${verdict}`);
+  assert.equal(parsed.natural, 'A');
+  assert.equal(parsed.nuance, 'tie');
+});
+
 test('pairwise comparison rejects run and dataset identity mismatches', () => {
   const config = {
     runId: 'candidate', datasetVersion: 'v1', datasets: ['handbuilt-ext.jsonl'],
@@ -67,6 +75,23 @@ test('pairwise comparison rejects run and dataset identity mismatches', () => {
     () => validateComparableConfigs({ ...config, runId: 'wrong' }, { ...config, runId: 'baseline' }, 'candidate', 'baseline'),
     /runId/,
   );
+});
+
+test('pairwise comparison rejects harness settings that differ from the baseline', () => {
+  const config = {
+    runId: 'candidate', datasetVersion: 'v1', datasets: ['handbuilt-ext.jsonl'],
+    datasetChecksums: { 'handbuilt-ext.jsonl': 'same' },
+    promptHash: 'p1', scoringVersion: 1, harness: 'haen', uiLanguage: 'ko',
+    temperature: 0, jsonMode: true, stream: true, reasoningEffort: 'none',
+  };
+  const baseline = { ...config, runId: 'baseline' };
+  validateComparableConfigs(config, baseline, 'candidate', 'baseline');
+  for (const [key, value] of Object.entries({ promptHash: 'p2', reasoningEffort: 'low', stream: false, uiLanguage: 'en' })) {
+    assert.throws(
+      () => validateComparableConfigs(config, { ...baseline, [key]: value }, 'candidate', 'baseline'),
+      new RegExp(`harness settings differ \\(${key}\\)`),
+    );
+  }
 });
 
 test('pairwise comparison rejects mismatched handbuilt item sets', () => {

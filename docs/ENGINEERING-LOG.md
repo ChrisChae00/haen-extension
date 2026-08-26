@@ -291,22 +291,78 @@ hashes, and a matching `$1.649487375` cost. No pairwise result exists yet, so no
 been published. The review did find blockers that must be closed before Phase 5 can produce a defensible
 claim:
 
-- pairwise comparability currently checks run IDs and dataset identity only; it must also reject a
-  different prompt, scoring version, UI language, generation settings, JSON/streaming mode, or effective
-  no-think transport
-- item-level judge failures currently leave a partial file and still exit successfully; a 40-item success
-  claim must require 40 complete, two-order verdicts
-- the tuned MLX/Ollama path changes runner, quantisation and template as well as weights; evaluate against
-  both the product baseline (`qwen3:14b`) and an untuned model on the same serving path before attributing
-  a delta to LoRA
-- the experimental runner needs `/no_think`, but that input transform is not yet recorded in `promptHash`;
-  make it an explicit, persisted transport setting
-- `ALL_CHECKS` contains 14 checks, not 15, and language tags are only checked for non-emptiness. Add a
+- ✅ *(closed, see 7.1)* pairwise comparability currently checks run IDs and dataset identity only; it
+  must also reject a different prompt, scoring version, UI language, generation settings, JSON/streaming
+  mode, or effective no-think transport
+- ✅ *(closed, see 7.1)* item-level judge failures currently leave a partial file and still exit
+  successfully; a 40-item success claim must require 40 complete, two-order verdicts
+- ⬜ the tuned MLX/Ollama path changes runner, quantisation and template as well as weights; evaluate
+  against both the product baseline (`qwen3:14b`) and an untuned model on the same serving path before
+  attributing a delta to LoRA
+- ⬜ the experimental runner needs `/no_think`, but that input transform is not yet recorded in
+  `promptHash`; make it an explicit, persisted transport setting
+- ⬜ `ALL_CHECKS` contains 14 checks, not 15, and language tags are only checked for non-emptiness. Add a
   direction-aware language-tag check before restoring the 15-check label
-- freeze the 20 manual-review IDs and record item-level decisions before looking at candidate results
-- immediately before Gemini Batch submission, recompute the actual payload hash and compare it with the
-  state file; the completed Phase 4 payload was checked after the fact and did match
+- ⬜ freeze the 20 manual-review IDs and record item-level decisions before looking at candidate results
+- ✅ *(closed, see 7.1)* immediately before Gemini Batch submission, recompute the actual payload hash and
+  compare it with the state file; the completed Phase 4 payload was checked after the fact and did match
 
 Phase 3 proves that a fused affine int4 model loads and answers through Ollama. Peak memory (10.621 GB)
 and the HTTP smoke result were terminal observations rather than durable machine-readable artifacts, so
 they are operational evidence, not reproducible benchmark measurements.
+
+---
+
+### 7.1 The blockers that were code, fixed (2026-08-26)
+
+A second `/code-review` pass over the two commits that introduced the pairwise judge and the teacher
+batch (`f2c7942`, `dc13a44`) found that §7's rules were **documented but not enforced**: the code read
+like it had complete guards, and did not. Seven were fixed; the remaining three in §7 are decisions and
+experiment design, not code. Tests 57 → 61, all passing.
+
+- **A p-value could be printed on a partial subset**
+  - *Symptom*: `mainPairwise` summarised and exited 0 even with `failures > 0`. A failed item is simply
+    absent from `subset.map(cached.get).filter(Boolean)`, so a run where 12 of 40 items hit a 429 prints
+    `p=0.021` computed on n=28, with nothing on screen saying so
+  - *Why it is dangerous*: it is the exact failure MEASUREMENT-NOTES §6 invariant 2 was written to forbid,
+    and the surviving items are not a random subset — they are the ones the judge found easy to answer
+  - *Fix*: after the loop, every item in the subset must have a complete two-order row or the command
+    throws (exit 1). Partial rows stay on disk as resume points. The completion line now reads
+    `complete/total` instead of `todo − failures`, which had also over-reported progress on resume
+- **A network failure was laundered into "unparseable verdict"**
+  - *Cause*: `judgePairwiseOrder` ended in `.catch(() => {})`. The catch is load-bearing — a judge verdict
+    has no `alternatives`, so the translation parser rejects every valid verdict — but it swallowed 429,
+    401 and dropped connections identically. A quota-exhausted run showed only `judge returned no JSON
+    object:` with an empty body
+  - *Fix*: empty `raw` means no response body ever arrived → re-throw. Non-empty `raw` means the response
+    arrived and only the parser refused it → continue as before
+- **Comparability checked two fields out of ten** — `validateComparableConfigs` now also rejects a
+  differing `promptHash`, `scoringVersion`, `harness`, `uiLanguage`, `temperature`, `jsonMode`, `stream`
+  or `reasoningEffort`. Git sha is deliberately excluded: a tuned run is always built later than its
+  baseline, so requiring an equal sha would make every real comparison impossible
+- **The judge's JSON extractor re-introduced the 1.5 bug** — `extractVerdict` / `extractPairwiseVerdict`
+  used a greedy `/\{[\s\S]*\}/` without `stripThinking`, so a judge that emits a `<think>` block
+  containing braces produced a slice from the scratchpad's first `{` to the answer's last `}`, `JSON.parse`
+  threw, and the item was dropped. Same class as §1.5. Both now strip first; regression test added
+- **The batch payload was never checked against the hash that attests to it** — `submitBatch` read
+  `payload.json` from disk and POSTed it while `state.json` vouched for a different `inputHash`. The
+  mismatch is undetectable after submission. It now recomputes the hash from what is actually about to be
+  sent and refuses on mismatch
+- **A certain rejection and a possible one shared a terminal state** — a 400/403, or a 200 with no
+  `body.name`, landed in `submission_uncertain` exactly like a real timeout, and that state is terminal:
+  `submit` refuses (`status !== 'prepared'`), `status` refuses (no `jobName`), `prepare` returns
+  unchanged. Recovery meant hand-editing `state.json`. A 4xx with a parsed error body is now a *certain*
+  rejection — the server created nothing — so the batch returns to `prepared`; only no-response, 5xx, or
+  an unreadable 2xx stays uncertain
+- **The train/eval leakage test could pass without testing FLORES** — the eval side was
+  `[...].filter(existsSync)`, and `flores.jsonl` is gitignored (regenerable, not committed). With it
+  absent the FLORES half of the comparison silently dropped out while `assert.ok(evalFiles.length)` still
+  passed on the handbuilt files. All three eval files are now required. The `t.skip` when
+  `train/raw.jsonl` is absent is kept on purpose: before tuning there is nothing to leak
+- **`sampleFloresTrain.js` regenerated the training set on import** — `main()` ran unconditionally, unlike
+  `judge.js` and `teacherBatch.js` which have a `process.argv[1]` entry guard. Guard added
+
+Deliberately not changed: `judgePairwiseOrder` still uses `_translate` with no retry. Two fixed
+observations is the right semantics for a paired comparison — retrying until a judge agrees is not a
+measurement — and the completeness gate above is what makes it safe, because a lost item now stops the
+run instead of shrinking n.

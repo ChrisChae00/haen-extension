@@ -17,9 +17,14 @@ test('training sentences do not overlap the evaluation sets', (t) => {
   if (!existsSync(trainFile)) return t.skip('no training set built yet (node src/sampleFloresTrain.js)');
 
   const train = strings(read(trainFile));
+  // Every eval file, not the ones that happen to be present: flores.jsonl is gitignored
+  // (regenerable, not committed), and filtering it out would leave the FLORES side of the
+  // comparison silently unchecked while the test still passed on the handbuilt files.
   const evalFiles = ['flores.jsonl', 'handbuilt.jsonl', 'handbuilt-ext.jsonl']
-    .map(n => path.join(DATASETS_DIR, 'v1', n)).filter(existsSync);
-  assert.ok(evalFiles.length, 'no evaluation datasets found to check against');
+    .map(n => path.join(DATASETS_DIR, 'v1', n));
+  const missing = evalFiles.filter(f => !existsSync(f));
+  assert.deepEqual(missing.map(f => path.basename(f)), [],
+    'evaluation datasets missing; regenerate with `npm run sample-flores` before checking leakage');
 
   const evalStrings = strings(evalFiles.flatMap(read));
   const overlap = [...train].filter(s => evalStrings.has(s));

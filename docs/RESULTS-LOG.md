@@ -29,7 +29,7 @@ compliance, latency, cost, and LLM judgement.
 | Measurement axes | COMET · chrF++ · BLEU · 14-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
 | Paid judge verdicts (2026-08-22 snapshot) | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
 | Total paid measurement cost (2026-08-22 snapshot) | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
-| Harness tests (2026-08-26) | 57 passing (zero dependencies) |
+| Harness tests (2026-08-26) | 61 passing (zero dependencies) |
 
 ---
 
@@ -138,6 +138,9 @@ broker routing rather than model behaviour.
 
 ## Not done yet (honestly)
 
-- LoRA fine-tuning has not started. Before evaluation, close the comparability, complete-sample,
-  same-serving-control, no-think provenance, language-tag and frozen-manual-set blockers recorded in
-  [ENGINEERING-LOG.md §7](ENGINEERING-LOG.md#7-fine-tuning-phase-14-review-2026-08-26).
+- LoRA fine-tuning has not started, so **no tuning win has been published and none can be**. The
+  comparability, complete-sample and payload-hash blockers were closed in code on 2026-08-26
+  ([ENGINEERING-LOG.md §7.1](ENGINEERING-LOG.md#71-the-blockers-that-were-code-fixed-2026-08-26)); still
+  open before evaluation are the same-serving untuned control, `/no_think` provenance in `promptHash`,
+  the direction-aware language-tag check, and the frozen 20-ID manual set
+  ([§7](ENGINEERING-LOG.md#7-fine-tuning-phase-14-review-2026-08-26)).
