@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DATASETS_DIR, sha256 } from './dataset.js';
 
 // Training sentences for the distillation track. The evaluation set is drawn from
@@ -53,4 +54,6 @@ function main() {
   console.log(`  sha256 ${sha256(body)}`);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

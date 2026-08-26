@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -68,15 +68,68 @@ test('preparation is resumable for identical input and refuses changed input', (
   }
 });
 
+const preparedBatch = (dir) => {
+  const stateFile = path.join(dir, 'state.json');
+  const payloadFile = path.join(dir, 'payload.json');
+  prepareBatch({
+    items: [{ id: 'flores-dev-ke-0000', direction: 'ko_to_en', source: '안녕하세요' }],
+    stateFile,
+    payloadFile,
+    model: 'gemini-3.7-flash',
+  });
+  return { stateFile, payload: JSON.parse(readFileSync(payloadFile, 'utf8')) };
+};
+
+test('submission refuses a payload that does not match the prepared input hash', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'haen-teacher-batch-'));
+  try {
+    const { stateFile } = preparedBatch(dir);
+    await assert.rejects(
+      submitBatch({
+        stateFile,
+        payload: { batch: { inputConfig: { requests: { requests: [{ tampered: true }] } } } },
+        apiKey: 'test-key',
+        fetchImpl: async () => assert.fail('must not POST a payload the state does not attest to'),
+      }),
+      /payload does not match prepared batch/,
+    );
+    assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).status, 'prepared');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a 4xx rejection returns the batch to prepared; a network failure stays uncertain', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'haen-teacher-batch-'));
+  try {
+    const { stateFile, payload } = preparedBatch(dir);
+    await assert.rejects(submitBatch({
+      stateFile,
+      payload,
+      apiKey: 'bad-key',
+      fetchImpl: async () => ({
+        ok: false,
+        status: 403,
+        json: async () => ({ error: { status: 'PERMISSION_DENIED', message: 'bad key' } }),
+      }),
+    }), /PERMISSION_DENIED/);
+    assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).status, 'prepared');
+
+    await assert.rejects(submitBatch({
+      stateFile,
+      payload,
+      apiKey: 'test-key',
+      fetchImpl: async () => { throw new Error('socket hang up'); },
+    }), /socket hang up/);
+    assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).status, 'submission_uncertain');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('submission persists an uncertainty barrier before the network call and refuses duplicates', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'haen-teacher-batch-'));
-  const stateFile = path.join(dir, 'state.json');
-  writeFileSync(stateFile, JSON.stringify({
-    status: 'prepared',
-    model: 'gemini-3.7-flash',
-    displayName: 'haen-teacher-deadbeef',
-    inputHash: 'deadbeef',
-  }));
+  const { stateFile, payload } = preparedBatch(dir);
 
   let calls = 0;
   const fetchImpl = async () => {
@@ -91,16 +144,11 @@ test('submission persists an uncertainty barrier before the network call and ref
   };
 
   try {
-    const state = await submitBatch({
-      stateFile,
-      payload: { batch: {} },
-      apiKey: 'test-key',
-      fetchImpl,
-    });
+    const state = await submitBatch({ stateFile, payload, apiKey: 'test-key', fetchImpl });
     assert.equal(state.status, 'submitted');
     assert.equal(state.jobName, 'batches/job-1');
     await assert.rejects(
-      submitBatch({ stateFile, payload: { batch: {} }, apiKey: 'test-key', fetchImpl }),
+      submitBatch({ stateFile, payload, apiKey: 'test-key', fetchImpl }),
       /refusing to resubmit/,
     );
     assert.equal(calls, 1);

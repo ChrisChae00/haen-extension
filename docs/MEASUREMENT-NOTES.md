@@ -216,8 +216,15 @@ The Phase 1–4 review added four requirements for any tuning result:
 
 1. Pairwise runs are comparable only when dataset, prompt, scoring version, UI language, generation
    settings, JSON/streaming mode and no-think transport all match.
+   *Enforced since 2026-08-26 by `validateComparableConfigs` (`bench/src/judge.js`), which compares
+   `promptHash`, `scoringVersion`, `harness`, `uiLanguage`, `temperature`, `jsonMode`, `stream` and
+   `reasoningEffort` alongside dataset identity. Git sha is excluded on purpose — a tuned run is always
+   later than its baseline. No-think transport is still not in `promptHash`; that half is open.*
 2. A success p-value is invalid unless every requested item has both A/B orders. Partial rows may be
    resumable checkpoints, but the command must refuse a success summary and exit non-zero.
+   *Enforced since 2026-08-26: `judge.js --baseline-run-dir` throws before printing any sign test if any
+   requested item lacks a complete two-order row. The rule was written a week before the code obeyed it,
+   and in between the command would happily print `p=0.021` computed on 28 of 40 items.*
 3. Report two comparisons: tuned experimental runner vs product baseline for the end-to-end product
    decision, and tuned vs untuned on the same experimental runner for LoRA attribution.
 4. The manual regression set is a committed/frozen list of 20 IDs with item-level judgments, selected
@@ -227,3 +234,9 @@ Compliance currently aggregates 14 implemented checks. It does not yet verify th
 `target_lang` agree with the requested direction; non-empty wrong tags can pass. Historical scores remain
 valid for the checks they actually measured, but documentation must not call them “15-rule compliance”
 until the direction-aware check exists.
+
+**Why these two took a second review to close.** They were written into this document by the Phase 1–4
+review and then left as prose. The code around them looked complete — `validateComparableConfigs` reads
+like a full comparability guard, and the pairwise runner counts and reports its failures — so nothing
+prompted a reader to check the rule against the implementation. A documented invariant that no test
+asserts is a comment, not a guard.

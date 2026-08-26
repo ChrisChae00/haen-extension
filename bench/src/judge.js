@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, appendFileSync, renameSync } f
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { TranslatorAPI } from '../../src/apiClient.js';
+import { TranslatorAPI, stripThinking } from '../../src/apiClient.js';
 import { loadDataset } from './dataset.js';
 
 // LLM-as-judge for the three fields no reference metric can see.
@@ -94,7 +94,9 @@ function buildUserMessage(item, record) {
 }
 
 function extractVerdict(raw) {
-  const match = raw.match(/\{[\s\S]*\}/);
+  // Same failure the translation path hit: a reasoning block containing braces makes the
+  // greedy match span from the scratchpad's first `{` to the answer's last `}`.
+  const match = stripThinking(raw).match(/\{[\s\S]*\}/);
   if (!match) throw new Error(`judge returned no JSON object: ${raw.slice(0, 120)}`);
   const parsed = JSON.parse(match[0]);
   const scores = {};
@@ -105,8 +107,8 @@ function extractVerdict(raw) {
   return { scores, note: typeof parsed.note === 'string' ? parsed.note : '' };
 }
 
-function extractPairwiseVerdict(raw) {
-  const match = raw.match(/\{[\s\S]*\}/);
+export function extractPairwiseVerdict(raw) {
+  const match = stripThinking(raw).match(/\{[\s\S]*\}/);
   if (!match) throw new Error(`judge returned no JSON object: ${raw.slice(0, 120)}`);
   const parsed = JSON.parse(match[0]);
   const choices = {};
@@ -172,6 +174,21 @@ const datasetIdentity = config => ({
   datasetChecksums: config.datasetChecksums,
 });
 
+// MEASUREMENT-NOTES 6.1: two runs are comparable only when everything except the model
+// under test matches. A differing promptHash or reasoningEffort makes the sign test
+// attribute a harness change to the model. Git sha is deliberately not here - a tuned run
+// is made later than its baseline and would never compare.
+const harnessIdentity = config => ({
+  promptHash: config.promptHash,
+  scoringVersion: config.scoringVersion,
+  harness: config.harness,
+  uiLanguage: config.uiLanguage,
+  temperature: config.temperature,
+  jsonMode: config.jsonMode,
+  stream: config.stream,
+  reasoningEffort: config.reasoningEffort,
+});
+
 export function validateComparableConfigs(candidateConfig, baselineConfig, candidateDirName, baselineDirName) {
   if (candidateConfig.runId !== candidateDirName) {
     throw new Error(`candidate config runId ${JSON.stringify(candidateConfig.runId)} does not match directory ${JSON.stringify(candidateDirName)}`);
@@ -182,6 +199,13 @@ export function validateComparableConfigs(candidateConfig, baselineConfig, candi
   if (candidateConfig.runId === baselineConfig.runId) throw new Error('candidate and baseline runId must differ');
   if (stableJson(datasetIdentity(candidateConfig)) !== stableJson(datasetIdentity(baselineConfig))) {
     throw new Error('candidate and baseline config dataset identity differs');
+  }
+  const candidateHarness = harnessIdentity(candidateConfig);
+  const baselineHarness = harnessIdentity(baselineConfig);
+  const differing = Object.keys(candidateHarness)
+    .filter(key => stableJson(candidateHarness[key]) !== stableJson(baselineHarness[key]));
+  if (differing.length) {
+    throw new Error(`candidate and baseline harness settings differ (${differing.join(', ')}); only the model under test may differ`);
   }
 }
 
@@ -411,7 +435,13 @@ async function judgePairwiseOrder(api, item, candidate, baseline, candidatePosit
     useJsonMode: true,
     systemPromptOverride: PAIRWISE_RUBRIC,
     onRaw: body => { raw = body; },
-  }).catch(() => {});
+  }).catch(error => {
+    // The catch is load-bearing: a judge verdict has no `alternatives`, so the response
+    // parser always rejects a perfectly good verdict. But an empty `raw` means no response
+    // body ever arrived - a 429, a bad key, a dropped connection - and that must not be
+    // laundered into "unparseable verdict", which would silently shrink n.
+    if (!raw) throw error;
+  });
   return { raw, verdict: extractPairwiseVerdict(raw) };
 }
 
@@ -492,9 +522,18 @@ async function mainPairwise(args, runDir, candidateConfig) {
     }
     if ((index + 1) % 10 === 0) process.stdout.write(`\r  ${index + 1}/${todo.length}`);
   }
-  const tests = pairwiseSignTests(subset.map(item => cached.get(item.id)).filter(Boolean));
-  console.log(`\r  done. ${todo.length - failures} judged, ${failures} failed -> ${outFile}`);
-  for (const [criterion, result] of Object.entries(tests)) {
+  const rows = subset.map(item => cached.get(item.id));
+  const incomplete = subset.filter((item, index) => !isCompletePairwiseRow(rows[index]));
+  console.log(`\r  done. ${subset.length - incomplete.length}/${subset.length} items complete, ${failures} failed -> ${outFile}`);
+
+  // MEASUREMENT-NOTES 6.2: a p-value computed on whatever survived is not a smaller
+  // result, it is a different experiment. Partial rows stay on disk as resume points; the
+  // command refuses to summarise until every requested item has both orders.
+  if (incomplete.length) {
+    throw new Error(`${incomplete.length} of ${subset.length} items lack both A/B orders (${incomplete.slice(0, 5).map(item => item.id).join(', ')}${incomplete.length > 5 ? ', ...' : ''}). No p-value is valid on a partial subset - re-run to resume.`);
+  }
+
+  for (const [criterion, result] of Object.entries(pairwiseSignTests(rows))) {
     console.log(`  ${criterion}: candidate ${result.candidateWins}, baseline ${result.baselineWins}, ties ${result.ties}, exact sign-test p=${result.pValue}`);
   }
 }

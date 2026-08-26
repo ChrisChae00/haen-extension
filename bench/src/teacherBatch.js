@@ -172,9 +172,21 @@ export async function submitBatch({ stateFile, payload, apiKey, fetchImpl = fetc
     throw new Error(`batch is ${state.status}; refusing to resubmit`);
   }
 
+  // The state file attests to an inputHash; the payload is read from a separate file that
+  // can be edited or left stale. Recompute from what is actually about to be POSTed -
+  // after submission the mismatch is undetectable.
+  const requests = payload?.batch?.inputConfig?.requests?.requests;
+  const payloadHash = createHash('sha256')
+    .update(JSON.stringify({ model: state.model, requests }))
+    .digest('hex');
+  if (payloadHash !== state.inputHash) {
+    throw new Error(`payload does not match prepared batch (payload ${payloadHash.slice(0, 12)}, state ${String(state.inputHash).slice(0, 12)}); re-run prepare`);
+  }
+
   const submitting = { ...state, status: 'submitting', submitStartedAt: new Date().toISOString() };
   writeJsonAtomic(stateFile, submitting);
 
+  let status = null;
   try {
     const response = await fetchImpl(
       `${API_ROOT}/models/${encodeURIComponent(state.model)}:batchGenerateContent?key=${encodeURIComponent(apiKey)}`,
@@ -184,6 +196,7 @@ export async function submitBatch({ stateFile, payload, apiKey, fetchImpl = fetc
         body: JSON.stringify(payload),
       },
     );
+    status = response.status;
     const body = await response.json();
     if (!response.ok || !body.name) {
       throw new Error(`${response.status} ${body.error?.status ?? 'BATCH_SUBMIT_FAILED'}: ${body.error?.message ?? 'missing batch job name'}`);
@@ -197,9 +210,14 @@ export async function submitBatch({ stateFile, payload, apiKey, fetchImpl = fetc
     writeJsonAtomic(stateFile, submitted);
     return submitted;
   } catch (error) {
+    // A 4xx with a parsed error body is a certain rejection - the server saw the request
+    // and created nothing - so the batch goes back to `prepared` and can be fixed and
+    // resubmitted. Only a request that may actually have landed (no response, 5xx, or an
+    // unreadable 2xx) becomes `submission_uncertain`, which needs a human.
+    const rejected = status !== null && status >= 400 && status < 500;
     writeJsonAtomic(stateFile, {
       ...submitting,
-      status: 'submission_uncertain',
+      status: rejected ? 'prepared' : 'submission_uncertain',
       error: error.message,
       failedAt: new Date().toISOString(),
     });
