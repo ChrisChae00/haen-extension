@@ -207,3 +207,23 @@ rejects.
 against the request's `max_tokens` reservation rather than actual usage, so a real completion of
 ~300 tokens reserves ~2,800. This is the direct cause of the 200,000 TPD free tier shrinking to
 ~71 calls a day. Left alone because it is production code.
+
+---
+
+## 6. Fine-tuning comparison invariants
+
+The Phase 1–4 review added four requirements for any tuning result:
+
+1. Pairwise runs are comparable only when dataset, prompt, scoring version, UI language, generation
+   settings, JSON/streaming mode and no-think transport all match.
+2. A success p-value is invalid unless every requested item has both A/B orders. Partial rows may be
+   resumable checkpoints, but the command must refuse a success summary and exit non-zero.
+3. Report two comparisons: tuned experimental runner vs product baseline for the end-to-end product
+   decision, and tuned vs untuned on the same experimental runner for LoRA attribution.
+4. The manual regression set is a committed/frozen list of 20 IDs with item-level judgments, selected
+   before candidate outputs are inspected.
+
+Compliance currently aggregates 14 implemented checks. It does not yet verify that `detected_lang` and
+`target_lang` agree with the requested direction; non-empty wrong tags can pass. Historical scores remain
+valid for the checks they actually measured, but documentation must not call them “15-rule compliance”
+until the direction-aware check exists.

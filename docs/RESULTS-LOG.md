@@ -19,17 +19,17 @@ compliance, latency, cost, and LLM judgement.
 
 ---
 
-## Scale (as of 2026-08-22)
+## Scale
 
 | Item | Value |
 |---|---|
 | Models measured | 7 (gemini-3.7-flash, gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b, local qwen3:14b think/no-think) |
 | Dataset | 212 items (FLORES-200 devtest 200 + 12 hand-written) + 40 judge-only idiom items, both directions |
-| Total API calls | 3,200+ (212 × 2–3 runs per model) |
-| Measurement axes | COMET · chrF++ · BLEU · 15-rule compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
-| Paid judge verdicts | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
-| Total paid measurement cost | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
-| Harness tests | 40 passing (~160ms, zero dependencies) |
+| Total API calls (2026-08-22 measurement snapshot) | 3,200+ (212 × 2–3 runs per model) |
+| Measurement axes | COMET · chrF++ · BLEU · 14-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
+| Paid judge verdicts (2026-08-22 snapshot) | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
+| Total paid measurement cost (2026-08-22 snapshot) | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
+| Harness tests (2026-08-26) | 57 passing (zero dependencies) |
 
 ---
 
@@ -44,7 +44,7 @@ Decomposed the thinking budget by measurement, identified the bottleneck, remove
 | latency p50 | 40,087 ms | **16,211 ms** (−60%) |
 | **TTFB p50** | 25,144 ms | **534 ms** (−98%, 47×) |
 | COMET | 0.8849 | 0.8861 (CIs overlap, no regression) |
-| 15-rule schema compliance | 100% | 99.5% |
+| 14-check schema compliance | 100% | 99.5% |
 
 > Method: used ollama's native timing fields to separate prefill / thinking / decode → confirmed
 > thinking was 59% (24s) of total latency → threaded the `reasoning_effort` option through the
@@ -89,7 +89,7 @@ real data or about to:
 | `minIntervalMs` was not a rate limiter | Meaningless at concurrency > 1 | Explicit throw |
 | No validation of the price table | The gemini price was off by 2× | `fetchedAt` validation |
 | Reasoning-response parser | **All 55 items lost `alternatives`; in 15 the translation itself was the model's thinking** | `stripThinking` + candidate parsing |
-| Summary report showed 1 of 15 rules | Reported 96.2% as 100% | Show the lowest rule + the rule name |
+| Summary report showed 1 of 14 checks | Reported 96.2% as 100% | Show the lowest check + the check name |
 | Dead key / network drop logged as item failure | **Resume skipped them — 145 items were about to be lost permanently** | A runtime failure stops the run immediately |
 | Judge silently discarded truncated responses | Sample size differed per model, so comparison broke down | Retry + fixed sample |
 | Hidden thinking tokens missing from billing | The cost column for reasoning models reported **half the real figure** | Back out `total − prompt − completion` and add it to the output charge |
@@ -127,8 +127,8 @@ broker routing rather than model behaviour.
   `dev` split, guaranteeing structural zero overlap (not yet executed; the rule is settled)
 - **Reproducibility**: every run records `promptHash` / `datasetChecksums` / git sha / model id.
   Differing hashes are flagged as not comparable
-- **The danger of a single number**: compliance in the summary table is the **lowest of the 15 rules
-  plus the rule name**. An average, or one representative rule, lies for as long as perfect scores
+- **The danger of a single number**: compliance in the summary table is the **lowest of the 14 implemented
+  checks plus the check name**. An average, or one representative check, lies for as long as perfect scores
   keep coming
 - **Fixed judge**: LLM-as-judge uses the same model, the same rubric hash, and the same 12 items
   across all 5 runs. If judges are mixed, the report prints "not comparable"
@@ -138,5 +138,6 @@ broker routing rather than model behaviour.
 
 ## Not done yet (honestly)
 
-- Draft written to grow the judge sample 12 → 40 items; not yet reviewed
-- LoRA fine-tuning not started. The goal is "as good as thinking, without thinking" (FINETUNING §12.7)
+- LoRA fine-tuning has not started. Before evaluation, close the comparability, complete-sample,
+  same-serving-control, no-think provenance, language-tag and frozen-manual-set blockers recorded in
+  [ENGINEERING-LOG.md §7](ENGINEERING-LOG.md#7-fine-tuning-phase-14-review-2026-08-26).

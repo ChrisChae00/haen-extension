@@ -9,6 +9,7 @@
     "test": "node --test src/*.test.js",
     "sample-flores": "node src/sampleFlores.js",
     "run": "node src/run.js",
-    "sample-flores-train": "node src/sampleFloresTrain.js"
+    "sample-flores-train": "node src/sampleFloresTrain.js",
+    "teacher-batch": "node src/teacherBatch.js"
   }
 }

@@ -62,15 +62,15 @@ one of them **exited cleanly, and the result files looked fine**. That is why te
 - **Lesson**: **when starting to measure a reasoning model on a new provider, look at one raw
   response with your own eyes.** Looking only at `parsed`, salvaged garbage looks fine
 
-### 1.6 The summary report was looking at 1 of 15 rules
+### 1.6 The summary report was looking at 1 of 14 checks
 
 - **Symptom**: `gpt-oss-20b` had `jsonValid` 97.6% but the table showed compliance **100%**
-- **Cause**: the summary column read only `hasAllRequired`, the easiest of the 15 rules to pass.
+- **Cause**: the summary column read only `hasAllRequired`, the easiest of the 14 implemented checks to pass.
   The first three models were all perfect, so it went unnoticed for three runs
-- **Fix**: display **the lowest of the 15 rules plus that rule's name** (`96.2% (altsExactlyTwo)`)
+- **Fix**: display **the lowest of the 14 checks plus that check's name** (`96.2% (altsExactlyTwo)`)
 - **Side effect**: `gemini-3.5-flash-lite` was corrected from 100% → **99.5% (noHanjaLeak)**
 - **Lesson**: when folding several metrics into one, **make the folding function visible in the
-  name**. "Compliance" reads as all 15 rules but was actually 1, and while perfect scores keep
+  name**. "Compliance" reads as all implemented checks but was actually 1, and while perfect scores keep
   coming nobody can tell
 
 ### 1.7–1.8 Runtime failures logged as item failures (same shape, happened three times)
@@ -148,7 +148,7 @@ break out of that overlapping band. **Not size, but generation.**
 
 ### 2.2 "Compliance is where fine-tuning will pay off" — disproved
 
-Before any tuning the local 14B was already at **100% on all 15 rules, 0 Hanja leaks out of 636**.
+Before any tuning the local 14B was already at **100% on all 14 implemented checks, 0 Hanja leaks out of 636**.
 There was nothing to raise. The evidence for this hypothesis — `llama-3.3-70b`'s `noHanjaLeak` at
 66.7% — was **a defect of that one model**, not a general size-independent phenomenon.
 
@@ -194,7 +194,7 @@ field is not sent, so **the request body the extension sends is byte-identical**
 | latency p50 | 40,087 ms | **16,211 ms** |
 | TTFB p50 | 25,144 ms | **534 ms** (47×) |
 | COMET | 0.8849 (0.877–0.892) | 0.8861 (0.878–0.893) |
-| compliance, lowest of 15 rules | 100% | 99.5% (1 item each on 2 rules) |
+| compliance, lowest of 14 checks | 100% | 99.5% (1 item each on 2 checks) |
 | judge `tipFactual` | 91.7% | 66.7% (n=12) |
 | identical output across runs | 100.0% | 100.0% |
 
@@ -280,3 +280,33 @@ tuning goal from "get nuance to 27B level" to **"as good as thinking, without th
 | Student at n=40 (2026-08-24) | Student judged on the idiom set. The gap is far wider than n=12 showed: `naturalFluent` 100% → **70%**, `nuanceGrounded` 41.7% → **30%**. On idioms the translation itself breaks, not only the explanation |
 | Judge validation (2026-08-24) | Cross-judge on 20 items. Teacher 92.5% agreement, **student 66.2%**, `nuanceGrounded` 50%. The rubric has no pass threshold |
 | Next | LoRA distillation — "as good as thinking, without thinking" |
+
+---
+
+## 7. Fine-tuning Phase 1–4 review (2026-08-26)
+
+The Phase 4 dataset was independently regenerated from the stored batch response: 997 unique inputs,
+996 accepted outputs, the same deterministic 896/100 split, zero train/valid overlap, matching file
+hashes, and a matching `$1.649487375` cost. No pairwise result exists yet, so no invalid tuning win has
+been published. The review did find blockers that must be closed before Phase 5 can produce a defensible
+claim:
+
+- pairwise comparability currently checks run IDs and dataset identity only; it must also reject a
+  different prompt, scoring version, UI language, generation settings, JSON/streaming mode, or effective
+  no-think transport
+- item-level judge failures currently leave a partial file and still exit successfully; a 40-item success
+  claim must require 40 complete, two-order verdicts
+- the tuned MLX/Ollama path changes runner, quantisation and template as well as weights; evaluate against
+  both the product baseline (`qwen3:14b`) and an untuned model on the same serving path before attributing
+  a delta to LoRA
+- the experimental runner needs `/no_think`, but that input transform is not yet recorded in `promptHash`;
+  make it an explicit, persisted transport setting
+- `ALL_CHECKS` contains 14 checks, not 15, and language tags are only checked for non-emptiness. Add a
+  direction-aware language-tag check before restoring the 15-check label
+- freeze the 20 manual-review IDs and record item-level decisions before looking at candidate results
+- immediately before Gemini Batch submission, recompute the actual payload hash and compare it with the
+  state file; the completed Phase 4 payload was checked after the fact and did match
+
+Phase 3 proves that a fused affine int4 model loads and answers through Ollama. Peak memory (10.621 GB)
+and the HTTP smoke result were terminal observations rather than durable machine-readable artifacts, so
+they are operational evidence, not reproducible benchmark measurements.
