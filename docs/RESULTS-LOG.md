@@ -188,12 +188,33 @@ broker routing rather than model behaviour.
 
 ## Not done yet (honestly)
 
-- LoRA fine-tuning has not started, so **no tuning win has been published and none can be**. Six of the
-  seven pre-evaluation blockers were closed in code on 2026-08-26 — comparability, complete-sample and
-  payload-hash ([§7.1](ENGINEERING-LOG.md#71-the-blockers-that-were-code-fixed-2026-08-26)), then
-  `/no_think` provenance in `promptHash`, the direction-aware language-tag check, and the frozen 20-ID
-  manual list ([§7.2](ENGINEERING-LOG.md#72-three-more-blockers-closed-2026-08-26)). The 20 item-level
-  verdicts were recorded on 2026-08-27, before any tuned output exists
-  ([§7.3](ENGINEERING-LOG.md#73-the-manual-gate-reviewed-2026-08-27)): the baseline scores **12 pass /
-  8 fail**, and the file carries the caveat that an LLM filled a gate meant to be the non-LLM check.
-  Still open: the **same-serving untuned control run**, which needed the `/no_think` setting it now has.
+- **No tuning win has been published, and none can be yet.** The first QLoRA run finished on
+  2026-08-27 (rank 8 over the top 8 layers, 896 distilled samples, 224 optimizer updates,
+  6h08m local, holdout loss 1.566 → 0.859), but a loss curve is not a result. The drop is
+  front-loaded — 94% of it inside the first 28 updates — which is the expected shape for
+  learning an output *format*, and these training records are a 1,365-token system prompt
+  plus a six-field JSON response. Whether the behaviour this track cares about changed is
+  not separable from schema fitting by that curve. The tuned checkpoint has not been fused,
+  served, or judged. Until it is measured against the untuned control on the item-paired
+  sign test, the honest claim is that training ran and was healthy, not that it worked.
+- **The untuned control exists and is measured** (2026-08-27), which closed the last of the
+  seven pre-evaluation blockers. It immediately earned its cost: with weights mathematically
+  identical to the product baseline, 31 of 40 `natural` outputs differ, and the absolute
+  judge moved `tipFactual` from 70.0% to 50.0% with 20 of 40 items flipping. Every one of
+  those deltas would otherwise have been credited to LoRA. Regression thresholds were
+  re-anchored to the control as a result, because the baseline's values would have failed a
+  candidate that changed nothing.
+- **Two comparison decisions are deliberately unmade.** COMET's confidence-interval floor is
+  a 212-item number while the control was only run on the 40 idiom items, so a 212-item
+  control run is required before the candidate is evaluated at that size. And the frozen
+  manual-20 verdicts were recorded against product-baseline outputs, which differ from the
+  control's on 31 of 40 items — so whether that gate compares the candidate to the baseline
+  or to the control has to be settled, not guessed.
+- **Significance is claimed for one comparison only.** Tuned vs untuned control gets the
+  sign test. Tuned vs the shipped `qwen3:14b` is reported as descriptive win/loss/tie counts
+  with no p-value computed or quoted, because the two differ in runner, quantisation, and
+  template as well as weights. The reasoning, and the two alternatives rejected, are in
+  [MEASUREMENT-NOTES §9](MEASUREMENT-NOTES.md#9-refusing-to-compute-a-statistic-2026-08-27).
+- **The manual 20-item gate was filled by an LLM**, which is what it was meant not to be. The
+  frozen file records that caveat alongside the 12 pass / 8 fail result. A human should re-read
+  at least the 8 failures before any tuning claim leans on it.

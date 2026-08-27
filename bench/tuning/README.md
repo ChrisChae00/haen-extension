@@ -4,6 +4,7 @@ Scripts that build the models the tuning comparison runs on. Everything here is
 reproducible from a cached base checkpoint; the multi-GB outputs are not committed.
 
 ```
+lora-run1.yaml            Phase 5's first training run, with the reasoning in comments
 make_zero_adapter.py      builds a LoRA adapter that provably changes nothing
 verify_zero_fuse.py       proves the fused control is the base model, and measures the
                           fuse round trip's own noise floor
@@ -68,3 +69,31 @@ unquantised norm tensors bit-identical. Worst single weight moved 0.09375 where 
 layer's largest weight is 1.15625; mean |diff| across re-quantised layers 2.6e-4. Small,
 but not zero — and the candidate pays the same cost, so with this control it cancels
 instead of being attributed to LoRA.
+
+## Training a candidate
+
+```bash
+../../.venv-mlx/bin/python -m mlx_lm lora -c lora-run1.yaml
+```
+
+Outputs land in `adapters-run1/` (gitignored): `adapters.safetensors` plus a numbered
+checkpoint every `save_every` iters. Serve one exactly like the control — same fuse, same
+affine injection, same `ollama show` check — pointing `--adapter-path` at this directory.
+
+Run 1 measured: 6h08m for 1,792 iters, peak 15.617 GB of 24 GB, holdout loss 1.566 -> 0.859.
+
+## Two more things worth not rediscovering
+
+**`iters` counts micro-batches, not optimizer steps.** `trainer.py` runs
+`zip(range(1, iters+1), iterate_batches(batch_size=...))`, so at `batch_size: 1` one iter is
+one training record. With 896 records and `grad_accumulation_steps: 8`, `iters: 500` is 0.56
+of an epoch and 62 Adam updates - not enough to move a rank-8 adapter, and a run that changes
+nothing is an uninformative null rather than a negative result. Divide `Trained Tokens` by the
+iteration count in the first report line to check this before letting a run continue.
+
+**Validation batches are shuffled, so `val_batches` cannot be reduced for speed.**
+`iterate_batches` draws them through `np.random.permutation`, which means a reduced count
+scores a different random subset at every evaluation and the losses are not comparable across
+evaluations - the one thing the holdout is for. Full holdout costs 645-705s here; take fewer
+points instead of fewer items. Run 1's decisions turned on differences of 0.008 and 0.002,
+which a resampled subset would have buried.
