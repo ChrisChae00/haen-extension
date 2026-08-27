@@ -604,3 +604,33 @@ the only thing the holdout is for. Kept the full set and took fewer points inste
 curve is readable; a noisy one is not.
 
 Tests 69 → 70.
+
+### 7.6 The first tuning run finished, and the loss curve cannot say whether it worked (2026-08-27)
+
+Phase 5's first QLoRA run completed in 6h08m on the corrected configuration: 1,792
+micro-batches (2 epochs, 224 Adam updates), rank 8 over the top 8 layers, LR 2e-5,
+`mask_prompt` on, peak memory 15.617 GB of 24 GB. Holdout loss over the full 100-item
+validation split went 1.566 → 0.943 → 0.900 → 0.881 → 0.867 → 0.869 → 0.864 → 0.860 → 0.859.
+
+Two numbers are worth keeping. **94% of the improvement landed in the first 28 optimizer
+updates** (−0.623 of −0.707), and **the entire second epoch bought 0.008** against the
+first epoch's 0.867. The second is a measurement, not an estimate: the next run can be
+one epoch and finish in half the time.
+
+The first number is the one to be careful with. A loss curve that drops hard and then
+flattens is the expected shape when a model is learning an output *format* — this
+teacher's records are a 1,365-token system prompt and a six-field JSON response, and the
+cheap thing to learn is the schema. Whether the thing this track actually cares about
+changed — literal renderings in the `natural` field on idioms — is not something this
+curve can distinguish from schema fitting. Both look like loss going down.
+
+So the run's outcome is not declared here. It is declared by the judge, against the
+untuned control, on the item-paired sign test. The loss curve says training was healthy:
+monotone, non-divergent, one +0.002 blip at iter 1120 that recovered, train-val gap
+widening from 0.03 to 0.12 while validation still fell — decelerating returns, not
+overfitting. "Healthy" and "worked" are different claims and only the first is supported.
+
+Keeping the full holdout instead of sampling it (rejected in 7.5, because
+`iterate_batches` permutes validation batches too) is what makes this readable at all.
+The differences that carried the decisions here are 0.008 and 0.002; a different random
+25 items per evaluation would have buried both in noise.
