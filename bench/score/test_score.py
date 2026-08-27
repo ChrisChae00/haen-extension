@@ -5,11 +5,12 @@ and it is the one that fails silently: a wrong figure looks exactly like a right
 These pin the thinking-token accounting, which has already been wrong once
 (docs/ENGINEERING-LOG.md 1.9) and understated a model's cost by roughly half.
 """
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from score import operational  # noqa: E402
+from score import SCORING_VERSION, operational  # noqa: E402
 
 PRICING = {"m": {"inputPer1M": 1.0, "outputPer1M": 10.0, "fetchedAt": "2026-08-21"}}
 CONFIG = {"modelId": "m", "provider": "google"}
@@ -52,6 +53,17 @@ def test_a_local_model_is_free_and_never_a_lower_bound():
     op = operational([rec(100, 50)], {"modelId": "m", "provider": "ollama"}, PRICING)
     assert op["costPer1kTranslations"] == 0.0
     assert op["costIsLowerBound"] is False
+
+
+def test_the_scoring_version_matches_the_javascript_side():
+    """A check added in compliance.js with the version bumped only there would let two
+    runs scored by different code claim to be comparable."""
+    js = (Path(__file__).resolve().parent.parent / "src/compliance.js").read_text(encoding="utf-8")
+    match = re.search(r"export const SCORING_VERSION = (\d+);", js)
+    assert match, "compliance.js no longer exports SCORING_VERSION"
+    assert int(match.group(1)) == SCORING_VERSION, (
+        f"compliance.js says {match.group(1)}, score.py says {SCORING_VERSION}"
+    )
 
 
 if __name__ == "__main__":

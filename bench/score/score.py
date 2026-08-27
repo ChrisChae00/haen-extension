@@ -29,7 +29,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-SCORING_VERSION = 2
+# Mirrors bench/src/compliance.js SCORING_VERSION. Bump both together; test_score.py
+# fails if they drift.
+SCORING_VERSION = 3
 
 # Checks where True means the model behaved. Everything else is a failure flag.
 POSITIVE_CHECKS = {

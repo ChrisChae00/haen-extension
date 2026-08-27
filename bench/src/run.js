@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { buildSystemPrompt } from '../../src/prompts.js';
 import { makeProvider } from './providers/index.js';
 import { loadDataset } from './dataset.js';
+import { SCORING_VERSION } from './compliance.js';
 import { priceFor, costUSD } from './pricing.js';
 
 const HARNESS_VERSION = '1.0.0';
@@ -173,9 +174,9 @@ async function main() {
     datasetChecksums: checksums,
     promptHash: promptHash(config.uiLanguage ?? 'ko', config.promptSuffix ?? ''),
     promptSuffix: config.promptSuffix ?? '',
-    // Bumped whenever a compliance check or judge rubric changes meaning. Two runs with
-    // different scoringVersion values are not comparable even at identical promptHash.
-    scoringVersion: 2,
+    // Bumped whenever a compliance check changes meaning (see compliance.js). Two runs
+    // with different scoringVersion values are not comparable even at identical promptHash.
+    scoringVersion: SCORING_VERSION,
     judgeModelId: config.judgeModelId ?? null,
     harnessVersion: HARNESS_VERSION,
     nodeVersion: process.version,

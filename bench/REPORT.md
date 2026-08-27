@@ -5,7 +5,7 @@
 
 Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120b, gpt-oss-20b, qwen3-14b-local, qwen3-14b-local-nothink, qwen3.6-27b.
 
-> **2 run(s) sit outside this matrix** (`gemini-3.7-flash-ext` on handbuilt-ext.jsonl; `qwen3-14b-nothink-ext` on handbuilt-ext.jsonl). They were measured on a different dataset, so their COMET and compliance numbers answer a different question and are not model rows. They appear in the judge table below, where the `n` column says what each was scored on.
+> **3 run(s) sit outside this matrix** (`gemini-3.7-flash-ext` on handbuilt-ext.jsonl; `qwen3-14b-nothink-ext` on handbuilt-ext.jsonl; `qwen3-14b-untuned-control-ext` on handbuilt-ext.jsonl). They were measured on a different dataset, so their COMET and compliance numbers answer a different question and are not model rows. They appear in the judge table below, where the `n` column says what each was scored on.
 
 ## Model Benchmark Comparison Matrix
 

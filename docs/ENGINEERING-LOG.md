@@ -296,9 +296,9 @@ claim:
   mode, or effective no-think transport
 - ✅ *(closed, see 7.1)* item-level judge failures currently leave a partial file and still exit
   successfully; a 40-item success claim must require 40 complete, two-order verdicts
-- ⬜ the tuned MLX/Ollama path changes runner, quantisation and template as well as weights; evaluate
-  against both the product baseline (`qwen3:14b`) and an untuned model on the same serving path before
-  attributing a delta to LoRA
+- ✅ *(closed, see 7.4)* the tuned MLX/Ollama path changes runner, quantisation and template as well as
+  weights; evaluate against both the product baseline (`qwen3:14b`) and an untuned model on the same
+  serving path before attributing a delta to LoRA
 - ✅ *(closed, see 7.2)* the experimental runner needs `/no_think`, but that input transform is not yet
   recorded in `promptHash`; make it an explicit, persisted transport setting
 - ✅ *(closed, see 7.2)* `ALL_CHECKS` contains 14 checks, not 15, and language tags are only checked for
@@ -479,3 +479,64 @@ share its blind spots. They are best read as a **pre-registered written standard
 control. A person should re-read at least the eight failures before any tuning claim leans on this file.
 `src/manualRegression.test.js` now fails if a verdict returns to `null`, if a verdict disagrees with its
 own two reasons, or if a failure carries no written reason.
+
+---
+
+### 7.4 The untuned control, and what it immediately proved (2026-08-27)
+
+The last §7 blocker. The control is the base model taken through the *entire* tuning pipeline with
+the weights left alone: MLX initialises `lora_b` to zeros and `LoRALinear.fuse()` computes
+`weight + (scale · lora_bᵀ) @ lora_aᵀ`, so fusing an untrained adapter is `weight + 0`. Built by
+`bench/tuning/make_zero_adapter.py`, fused, imported as `haen-qwen3-14b-untuned-control`, and
+measured on the 40 idiom items as `qwen3-14b-untuned-control-ext`.
+
+**It earned its cost on the first run: 31 of 40 `natural` outputs differ from the product baseline,
+with mathematically identical weights.** Serving path alone — MLX int4 affine through Ollama's
+experimental Safetensors runner, versus Q4_K_M through the standard one — rewrites 78% of this set.
+Several of those changes look like improvements:
+
+| item | product baseline | untuned control |
+|---|---|---|
+| `hbx-idc-005` | `그 이름은 좀耳에 익은 것 같아.` (Hanja leak) | `그 이름이 어렴풋이 기억난다.` |
+| `hbx-idc-003` | `잘 가라!` (a goodbye) | `잘 해봐!` |
+| `hbx-idc-013` | "Oh no, I slipped." | "What a shame, I slipped." (still the wrong subject) |
+| `hbx-idc-014` | "She has thin ears." | "She's got thin ears." (still literal) |
+
+Compliance moves too: the control is **100% on all 15 checks**, where the baseline's one Hanja leak
+put it at 97.5%. Without this control, a tuned model showing no Hanja leak would have had that
+credited to LoRA. Latency p50 is also lower (9,089 ms vs 10,931 ms), which is a quantisation and
+runner difference, not a tuning result. **This is the whole argument for the control in one run.**
+
+**A compliance check broke on the new transport, and it broke silently.** The control scored
+`prosePreamble` 0/40. Not prose: `/no_think` makes Qwen3 emit an empty `<think></think>` before the
+answer, so the body no longer starts with `{`. The client strips that block before parsing and the
+user never sees it, so this measured the serving path and called it an instruction-following failure
+— and because the summary column reports the *worst* rule, it would have published the tuned
+candidate and its control at 0% compliance.
+
+- **Fix**: `fenced` and `prosePreamble` now read the thinking-stripped body. `empty` deliberately
+  still reads the raw text — it asks whether a response arrived (transport), not whether the model
+  formatted its answer (instruction-following)
+- **Checked before changing anything**: `qwen3.6-27b`'s 97 flagged items are *real* prose ("Here's a
+  thinking process:" with no tags at all), so its published 54.2% `noPreamble` is genuine and
+  unmoved. Across all 3,545 records the fix changes exactly the 40 control rows, and `bench/REPORT.md`
+  regenerated with one line different: the count of runs sitting outside the model matrix
+
+**`scoringVersion` meant two things at once.** Bumping it to 3 made the new control incomparable to
+every earlier run — the field is stamped at run time, and `validateComparableConfigs` compares it, so
+a rescored old run stayed "not comparable" forever despite its compliance having been re-derived by
+the current code. It now means *the version that computed the stored compliance*: `npm run rescore`
+stamps it after re-deriving, and judge verdicts keep their own `rubricHash`. `SCORING_VERSION` lives
+in `compliance.js` with a changelog, `run.js` imports it instead of repeating a literal, and
+`test_score.py` fails if the Python copy drifts from the JavaScript one.
+
+**One thing this closes is also one thing it opens.** The gate now rejects
+control-vs-product-baseline: `promptHash` and `reasoningEffort` both differ, correctly, because they
+*are* different transports. That is the right answer and it invalidates the shape of the plan's first
+comparison — tuned vs `qwen3:14b` cannot be run through the pairwise sign test as a controlled A/B,
+because it is not one. It is a product comparison between two different products. The LoRA-attribution
+comparison (tuned vs this control) does pass the gate, since both sides share the serving path.
+Deciding how to report the product comparison is now the open item; the measurement is fine, the
+statistic was never applicable.
+
+Tests 68 → 69.

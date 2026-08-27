@@ -29,7 +29,7 @@ compliance, latency, cost, and LLM judgement.
 | Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
 | Paid judge verdicts (2026-08-22 snapshot) | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
 | Total paid measurement cost (2026-08-22 snapshot) | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
-| Harness tests (2026-08-27) | 68 passing (zero dependencies) |
+| Harness tests (2026-08-27) | 69 passing (zero dependencies) |
 
 ---
 
@@ -126,7 +126,25 @@ knowledge is present and only the output field is wrong — and both business-re
 correct `natural` with a casual alternative that reverses the speech act. 12/20 also lands close to the
 judge's independently measured 70% `naturalFluent` on the full 40.
 
-### 7. Cost optimisation — 80% more free-tier budget
+### 7. Built the control that says whether a tuning result is real
+
+The tuned model would not have differed from the product baseline by weights alone: different runner,
+different quantisation, different template. So before tuning anything, built the model that isolates
+it — the base weights through the *entire* pipeline, fused with a zero-initialised LoRA adapter, which
+is provably an identity operation.
+
+It paid for itself on its first run. **31 of 40 outputs differ from the product baseline with
+mathematically identical weights** — the serving path alone rewrites 78% of the idiom set. It also
+scores 100% on all 15 compliance checks where the baseline leaks Hanja on one item, and runs faster
+(p50 9,089 ms vs 10,931 ms). Every one of those differences would otherwise have been attributed to
+fine-tuning.
+
+The same run exposed a compliance check that measured the transport instead of the model: `/no_think`
+emits an empty `<think></think>`, the body stopped starting with `{`, and `prosePreamble` read 0/40.
+Since the summary column reports the worst rule, the tuning track was one run away from publishing
+itself at 0% compliance for a reason that had nothing to do with any model.
+
+### 8. Cost optimisation — 80% more free-tier budget
 
 Measured and confirmed that Groq deducts against the request's `max_tokens` reservation, not actual
 usage. Using the completion-token distribution across all models (p99 499, max 581) as evidence,

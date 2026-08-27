@@ -274,3 +274,51 @@ every row of `bench/REPORT.md` becomes incomparable at once.
 **Rejected - putting the tag in the system prompt**: the standard Ollama runner is documented to
 ignore `/no_think` in the system position, so the same config would mean "thinking off" on one runner
 and nothing at all on another. The user message works on both.
+
+---
+
+## 8. A format check that measured the transport (2026-08-27)
+
+**Where** `bench/src/compliance.js` — `prosePreamble`, `fenced`
+
+**Symptom** The untuned control scored `prosePreamble` 0 of 40. Every response was flagged as having
+prose in front of the JSON. None did.
+
+**Cause** `/no_think` makes Qwen3 emit an empty `<think></think>` before the answer, so the raw body
+no longer starts with `{`. `apiClient` strips that block before parsing and the user never sees it,
+but the check read the raw text.
+
+**Which numbers go wrong, and how** Not the ones already published — this only bites a transport that
+emits reasoning tags, and every recorded run either emits none or emits untagged prose. It bites the
+tuning track exactly: the summary table reports the *worst* rule, so both the tuned candidate and its
+control would have published **0% compliance**, on a serving detail, next to models measured without
+it. A cross-model column where one row is 0% for a reason unrelated to the model is worse than no
+column.
+
+**Chosen solution** Evaluate `fenced` and `prosePreamble` on the thinking-stripped body — the text
+the client parses and the user receives. `empty` still reads the raw text: it asks whether a response
+arrived at all, which is a transport question, while the other two ask whether the model formatted
+its answer as instructed. `scoringVersion` 3.
+
+**Rejected — special-casing an empty think block.** Tempting, since the empty one is the artefact and
+a non-empty one is the model actually thinking. But a model that thinks and *then* writes prose before
+its JSON has still written a preamble, and one that thinks and then opens a fence has still fenced. The
+question the check asks is about the answer, so the answer is what it should read; where the reasoning
+ended up is a different question, already answered by `reasoningTokens` and the latency split.
+
+**Rejected — leaving it and annotating the report.** The number would still be wrong in
+`metrics.json`, which is what every downstream comparison reads.
+
+**What was verified before changing it** `qwen3.6-27b`'s 97 flagged items are genuine untagged prose,
+so its published 54.2% `noPreamble` is real and unchanged. Across all 3,545 stored records the fix
+moves exactly the 40 control rows.
+
+### The scoring version had two meanings
+
+Bumping `scoringVersion` for the fix made the new run incomparable to every older one: the field is
+stamped into `config.json` at run time and `validateComparableConfigs` compares it, so a run whose
+compliance had just been re-derived by the current code still advertised the version it was recorded
+under. It now means **the version that computed the stored compliance** — `npm run rescore` stamps it
+after re-deriving — and judge verdicts are covered separately by their own `rubricHash`. The constant
+lives in `compliance.js` with a changelog, `run.js` imports it, and `test_score.py` fails if the Python
+mirror drifts.

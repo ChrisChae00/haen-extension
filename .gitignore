@@ -66,3 +66,8 @@ bench/xjudge/
 /docs/local/
 
 __pycache__/
+
+# MLX tuning venv and multi-GB fused checkpoints; rebuild with bench/tuning/*.py
+.venv-mlx/
+bench/tuning/zero-adapter/
+bench/tuning/fused-untuned-control/
