@@ -571,3 +571,36 @@ number and the control was only run on the 40 idiom items, and the frozen manual
 recorded against baseline outputs that differ from the control's on 31 of 40 items.
 
 Tests 68 → 69.
+
+### 7.5 Two library defaults that would each have wasted the run (2026-08-27)
+
+Phase 5's first QLoRA run was configured from the plan's starting hyperparameters, started,
+and stopped ten minutes in. Two `mlx_lm` defaults do not mean what the plan assumed.
+
+**`iters` counts micro-batches, not optimizer steps.** The training loop is
+`zip(range(1, iters+1), iterate_batches(batch_size=...))`, so at `batch_size: 1` one iter is
+one training record. The planned `iters: 500` is therefore 0.56 of an epoch over the
+896-record split and 62 Adam updates, not 500. A rank-8 adapter pushed 62 times at 2e-5 does
+not move, and a run that changes nothing is not a negative result — it is an uninformative
+null that costs six hours and answers nothing. The tell was in the first report line:
+`Trained Tokens 3095` after 10 iters is ~310 response tokens per record, which only divides
+out if an iter is one record. Corrected to 1,792 (2 epochs, 224 updates).
+
+**`mask_prompt` defaults to false.** The system prompt is ~1,365 tokens of a ~1,170-token
+median record, so the default spends most of the loss teaching the model to predict a fixed
+string it is handed at inference anyway. Set to true: this track corrects behaviour, so only
+the teacher's response should carry gradient.
+
+Neither default is wrong — they are right for the common case of short prompts and step-wise
+budgets. Both are wrong for this shape of data. The lesson is narrower than "read the docs":
+**a hyperparameter copied from a plan is not verified until one report line has been
+divided out by hand.** Ten minutes of arithmetic against the first log line caught both.
+
+A third finding came from trying to make validation cheaper. Full-holdout validation costs
+667s, and `val_batches: 25` looks like the obvious trade. It is not available: `iterate_batches`
+draws validation batches through `np.random.permutation`, so a reduced count scores a
+different random subset each time and the losses cannot be compared across evals — which is
+the only thing the holdout is for. Kept the full set and took fewer points instead. A coarse
+curve is readable; a noisy one is not.
+
+Tests 69 → 70.

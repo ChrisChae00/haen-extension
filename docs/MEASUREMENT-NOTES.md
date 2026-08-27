@@ -354,3 +354,36 @@ dressing that comparison up as a controlled experiment.
 **The general rule this is an instance of.** When a measurement's preconditions fail, the honest
 options are to fix the preconditions or to report the measurement without the statistic that assumed
 them. Computing it anyway and adding a caveat is not a third option — the number outlives the caveat.
+
+## 10. The leakage guard was watching a file the trainer does not read (2026-08-27)
+
+The one check this track cannot recover from missing is train/eval overlap: if a training
+sentence is also an evaluation sentence, every post-tuning number is a leaked exam paper and
+nothing downstream can detect it. That check exists, runs in `npm test`, and reported zero.
+
+It reads `bench/datasets/train/raw.jsonl` — the FLORES sampler's output. The files
+`mlx_lm.lora` actually opens are built downstream, at
+`bench/datasets/train/teacher/{train,valid}.jsonl`. Anything written straight to those never
+passed the guard.
+
+That is not hypothetical. The gap surfaced while reviewing a proposal to add a hand-written
+idiom set to training, to close the distribution mismatch between FLORES prose training data
+and an idiom-only eval set. At least 4 of the 40 eval items appeared in it directly, and one
+of those — eval `hbx-idc-018`, "눈치 좀 챙겨" → "Read the room" — appeared as a pair in both
+directions. Merged into the teacher split, it would have raised four scores by teaching the
+answers, and every test would still have passed.
+
+The guard now also reads the files the trainer opens, and checks both directions: an eval
+string can leak in as a training input or as a training target, and for a translation pair
+those are the same leak seen from either end.
+
+**Its ceiling is written into the test.** The comparison is exact-match, so a training
+sentence that *contains* an eval string ("Read the room and play it by ear" against
+"Read the room.") is real leakage it does not see. Substring matching was the obvious upgrade
+and was rejected: eval items run as short as "Break a leg!", so it fires on innocent text, and
+a check that cries wolf gets muted — strictly worse than one with a stated blind spot. Manual
+review of added data stays required, and the test says so.
+
+The general shape, which this project keeps rediscovering: a guard is only as good as the
+artifact it points at. This one had the right rule, the right assertion, and the wrong path,
+and pointed at the wrong path for as long as no data arrived by the route it could not see.

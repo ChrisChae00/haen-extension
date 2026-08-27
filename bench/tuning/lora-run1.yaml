@@ -1,0 +1,50 @@
+# Phase 5, first QLoRA run. Shape must match make_zero_adapter.py (rank 8, top 8
+# layers) or the untuned control passes through a different set of fused layers
+# than the candidate does.
+model: "mlx-community/Qwen3-14B-4bit"
+train: true
+data: "../datasets/train/teacher"
+
+fine_tune_type: lora
+num_layers: 8
+lora_parameters:
+  rank: 8
+  scale: 20.0
+  dropout: 0.0
+
+# The system prompt is ~1,365 tokens of a ~1,170-token median record, so without
+# mask_prompt roughly three quarters of the loss is spent predicting a fixed
+# string the model is always handed at inference. This is behaviour correction,
+# not knowledge injection: only the teacher's response should carry gradient.
+mask_prompt: true
+
+optimizer: adam
+learning_rate: 2e-5
+batch_size: 1
+grad_accumulation_steps: 8
+
+# `iters` counts MICRO-batches, not optimizer steps: trainer.py's loop is
+# `zip(range(1, iters+1), iterate_batches(batch_size=...))`. At batch_size 1 that
+# is one training record per iter, so 1792 = 2 epochs over the 896-record train
+# split and 1792/8 = 224 Adam updates. The first attempt used iters: 500, which
+# is 0.56 of an epoch and 62 updates - too few to move a rank-8 adapter at
+# 2e-5, and a run that changes nothing is an uninformative null, not a result.
+iters: 1792
+
+# Longest record measured over train+valid is 1,456 tokens; mlx_lm truncates at
+# this limit silently, so it sits above the observed max rather than at it.
+max_seq_length: 1536
+
+steps_per_report: 40
+
+# Validation costs 667s for the full holdout, so evaluating often is tempting to
+# fix by sampling. It is not available: iterate_batches draws val batches through
+# np.random.permutation, so val_batches: 25 scores a DIFFERENT random 25 each
+# time and the losses are not comparable across evals. The holdout exists to tell
+# memorised teacher style from learned behaviour, which needs a curve that can be
+# read - so keep the whole set and take fewer points. 8 evals, every 28 updates.
+steps_per_eval: 224
+val_batches: -1
+save_every: 224
+adapter_path: "adapters-run1"
+seed: 20260827
