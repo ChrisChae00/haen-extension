@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapPool } from './run.js';
+import { mapPool, promptHash } from './run.js';
 import { AllKeysExhausted } from './providers/haen.js';
 
 // minIntervalMs paces requests for providers whose free tier caps RPM (Google AI Studio,
@@ -58,4 +58,18 @@ test('an undefined return is kept, not mistaken for an item that never ran', asy
   const { results, stopped } = await mapPool([1, 2, 3], 1, async x => (x === 2 ? undefined : x));
   assert.deepEqual(results, [1, undefined, 3]);
   assert.equal(stopped, null);
+});
+
+test('an unset promptSuffix leaves promptHash byte-identical to runs recorded before it existed', () => {
+  // The committed baseline's recorded hash. If this changes, every run in bench/REPORT.md
+  // becomes "not comparable" against every new run, which is a table-wide invalidation,
+  // not a code change.
+  const baseline = '3d18dda71bc94b0088890122e25e677a46c80a0ffda479e040ca594d07c04c52';
+  assert.equal(promptHash('ko'), baseline);
+  assert.equal(promptHash('ko', ''), baseline);
+});
+
+test('promptSuffix changes promptHash, so a no-think run cannot pass as a thinking one', () => {
+  assert.notEqual(promptHash('ko', ' /no_think'), promptHash('ko'));
+  assert.notEqual(promptHash('ko', ' /no_think'), promptHash('ko', ' /think'));
 });

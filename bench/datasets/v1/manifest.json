@@ -13,10 +13,28 @@
       "note": "Not committed. Regenerate with `npm run sample-flores`; the seed makes it byte-identical."
     },
     "handbuilt.jsonl": {
-      "slices": ["news", "technical", "casual", "ui"],
+      "slices": [
+        "news",
+        "technical",
+        "casual",
+        "ui"
+      ],
       "targetPerSlice": 50,
       "currentCount": 12,
       "authoring": "LLM-drafted, human-reviewed. Drafting model must never be one under test."
+    },
+    "handbuilt-ext.jsonl": {
+      "slices": [
+        "idiom-business",
+        "idiom-casual"
+      ],
+      "currentCount": 40,
+      "note": "The idiom set. Judge-only: no reference translations, so COMET/chrF++/BLEU do not apply. This is the set the tuning pairwise comparison runs on."
+    },
+    "manual-regression-20.json": {
+      "generator": "frozen 2026-08-26 from selectPairwiseSubset(handbuilt-ext, 20)",
+      "committed": true,
+      "note": "Frozen manual regression gate for the tuning track: 20 ids, the no-think baseline's output for each, and blank reviewer verdicts. A failure gate only. src/manualRegression.test.js fails if handbuilt-ext.jsonl changes underneath it."
     }
   }
 }

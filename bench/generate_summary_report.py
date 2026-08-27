@@ -34,6 +34,15 @@ def main():
             metrics_file = run_path / "metrics.json"
             if not metrics_file.exists():
                 continue
+            # A smoke run is a "does the pipeline move" check on 3-30 items, not a
+            # measurement. Scoring one (which is a reasonable thing to do while
+            # debugging) used to add it to the model matrix as a peer row, next to
+            # 212-item runs and with a COMET CI several times wider - and it changed the
+            # headline "Benchmarked N model(s)" count. Named by convention, because the
+            # config carries no field that distinguishes intent.
+            if run_path.name.startswith("smoke"):
+                print(f"  skipping smoke run {run_path.name}", file=sys.stderr)
+                continue
             try:
                 runs.append(json.loads(metrics_file.read_text(encoding="utf-8")))
             except Exception as e:

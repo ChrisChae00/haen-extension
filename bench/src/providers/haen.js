@@ -95,7 +95,13 @@ export function makeHaenProvider(config, api = new TranslatorAPI()) {
         // rotation is harness overhead, and leaving it in inflates p90/p99 as if the
         // model were slow. The discarded attempts still show up in `retries`.
         started = performance.now();
-        parsed = await api.translate(item.source, {
+        // Transport-level prompt text, appended to the message the model sees. The only
+        // current use is Qwen3's `/no_think`: the Ollama experimental runner ignores
+        // `reasoning_effort` and this tag is the only way to turn thinking off there.
+        // It is appended to the user message, not the system prompt - the standard Ollama
+        // runner demonstrably ignores it in the system position (bench/configs/README.md).
+        // Hashed into promptHash, so a no-think run is never mistaken for a thinking one.
+        parsed = await api.translate(item.source + (config.promptSuffix ?? ''), {
           apiKey: apiKeys[keyIndex],
           provider: config.provider,
           modelId: config.modelId,

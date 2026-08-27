@@ -1,0 +1,765 @@
+{
+  "version": 1,
+  "frozenAt": "2026-08-26",
+  "purpose": "Manual regression gate for the LoRA tuning track. A FAILURE gate only - it can disqualify a tuned candidate, it can never be cited as evidence that tuning worked (FINETUNING.md 2).",
+  "selection": {
+    "method": "selectPairwiseSubset(handbuilt-ext, 20) - stratified by slice x direction, 5 per stratum, lowest id first within each stratum",
+    "deterministic": true,
+    "note": "Frozen here as an explicit id list so a later change to selectPairwiseSubset, or to the dataset, cannot silently move the gate. datasets/v1/manual-regression-20.test.js fails if it does."
+  },
+  "dataset": {
+    "version": "v1",
+    "files": [
+      "handbuilt-ext.jsonl"
+    ],
+    "checksums": {
+      "handbuilt-ext.jsonl": "26f7fe8fe35d036c3978babb4c78cc03afc44cdd472226ee8eaf29ab779a9d01"
+    }
+  },
+  "baseline": {
+    "runId": "20260824T214106-qwen3-14b-nothink-ext",
+    "modelId": "qwen3:14b",
+    "provider": "ollama",
+    "promptHash": "3d18dda71bc94b0088890122e25e677a46c80a0ffda479e040ca594d07c04c52",
+    "note": "The outputs recorded below are runIndex 0 of this run - the no-think product baseline the tuned candidate must not regress against."
+  },
+  "criteria": {
+    "meaningDistortion": "Does the output state something the source does not, or drop something the source does? Obvious distortion only - a debatable register choice is not a failure here.",
+    "hanjaLeak": "Any Hanja/Chinese character in a Korean-written field (nuance, tip, alternative labels, and natural/literal when direction is en_to_ko).",
+    "verdict": "pass | fail | null. null means not yet reviewed. Fill these in BEFORE any tuned candidate output is generated or inspected; a verdict recorded after seeing the candidate is not a control."
+  },
+  "ids": [
+    "hbx-idb-001",
+    "hbx-idb-002",
+    "hbx-idb-003",
+    "hbx-idb-004",
+    "hbx-idb-005",
+    "hbx-idb-011",
+    "hbx-idb-012",
+    "hbx-idb-013",
+    "hbx-idb-014",
+    "hbx-idb-015",
+    "hbx-idc-001",
+    "hbx-idc-002",
+    "hbx-idc-003",
+    "hbx-idc-004",
+    "hbx-idc-005",
+    "hbx-idc-011",
+    "hbx-idc-012",
+    "hbx-idc-013",
+    "hbx-idc-014",
+    "hbx-idc-015"
+  ],
+  "review": [
+    {
+      "id": "hbx-idb-001",
+      "slice": "idiom-business",
+      "direction": "en_to_ko",
+      "source": "Let's touch base offline.",
+      "baselineOutput": {
+        "natural": "오프라인으로 연락해 보자.",
+        "literal": "",
+        "nuance": "이 표현은 비공식적이며, 팀원이나 동료 사이에서 일상적인 대화에서 사용된다. 'touch base'는 간단한 업데이트나 대화를 의미한다.",
+        "tip": "한국어로 '오프라인으로 연락해 보자'라고 번역할 때, 'touch base'의 의미가 '간단한 업데이트'라는 점을 고려해 '간단하게 이야기해 보자'처럼 더 자연스럽게 표현하는 것이 좋다.",
+        "alternatives": [
+          {
+            "label": "일반적인 상황",
+            "register": "neutral",
+            "expressions": [
+              "오프라인에서 연락해 보자.",
+              "오프라인으로 이야기해 보자."
+            ]
+          },
+          {
+            "label": "비공식적인 상황",
+            "register": "casual",
+            "expressions": [
+              "오프라인에서 좀 이야기해 봐.",
+              "오프라인으로 좀 연락해 봐."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-002",
+      "slice": "idiom-business",
+      "direction": "en_to_ko",
+      "source": "Let's circle back on this later.",
+      "baselineOutput": {
+        "natural": "이건 나중에 다시 논의하자.",
+        "literal": "",
+        "nuance": "이 표현은 일상적인 대화에서 사용되며, 현재의 논의를 잠시 미루고 나중에 다시 다루겠다는 의미로 쓰인다.",
+        "tip": "한국어로 '나중에 다시 논의하자'라고 번역할 때, '나중에'를 '다음에'로 잘못 옮기는 경우가 있다.",
+        "alternatives": [
+          {
+            "label": "일반적인 상황",
+            "register": "neutral",
+            "expressions": [
+              "이건 나중에 다시 생각해보자.",
+              "이건 나중에 다시 다루자."
+            ]
+          },
+          {
+            "label": "비공식적인 상황",
+            "register": "casual",
+            "expressions": [
+              "이건 나중에 다시 말해보자.",
+              "이건 나중에 다시 생각해."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-003",
+      "slice": "idiom-business",
+      "direction": "en_to_ko",
+      "source": "I don't have the bandwidth for that right now.",
+      "baselineOutput": {
+        "natural": "지금은 그런 일에 시간을 할애할 수 없어요.",
+        "literal": "",
+        "nuance": "이 표현은 상대방의 요청이나 제안을 거절하거나, 현재 상황에서 다른 일에 집중해야 한다고 설명할 때 사용됩니다. 상대방에게 약간의 사과를 담아 전달하는 것이 일반적입니다.",
+        "tip": "한국어로 '대역폭'이라는 표현을 그대로 사용하면 문맥이 흐려질 수 있으므로, '시간'이나 '여유' 같은 표현으로 자연스럽게 대체하는 것이 좋습니다.",
+        "alternatives": [
+          {
+            "label": "일반적인 상황",
+            "register": "neutral",
+            "expressions": [
+              "지금은 그런 일에 시간을 할애할 수 없어요.",
+              "지금은 그런 걸 할 여유가 없어요."
+            ]
+          },
+          {
+            "label": "더 부드럽게 표현하고 싶은 상황",
+            "register": "casual",
+            "expressions": [
+              "지금은 그런 걸 할 여유가 없어서 미안해요.",
+              "지금은 그런 일에 집중할 수 없어서 죄송해요."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-004",
+      "slice": "idiom-business",
+      "direction": "en_to_ko",
+      "source": "Let's keep it on the back burner.",
+      "baselineOutput": {
+        "natural": "잠시 뒤로 미루자.",
+        "literal": "",
+        "nuance": "이 표현은 상황을 잠시 미루거나 다른 일에 집중하려는 경미한 요청을 나타냅니다. 영어 원어민은 이 표현을 일상적인 대화에서 자연스럽게 사용합니다.",
+        "tip": "한국어로 '뒤로 미루다'를 직역하면 '뒤로 미루다'처럼 들릴 수 있지만, 이 표현은 상황을 잠시 미루는 경미한 요청을 나타내는 것이므로, '잠시 뒤로 미루자'처럼 자연스럽게 표현하는 것이 좋습니다.",
+        "alternatives": [
+          {
+            "label": "일상적인 대화",
+            "register": "neutral",
+            "expressions": [
+              "잠시 뒤로 미루자.",
+              "먼저 다른 일에 집중해 보자."
+            ]
+          },
+          {
+            "label": "비공식적인 상황",
+            "register": "casual",
+            "expressions": [
+              "그건 나중에 생각하자.",
+              "먼저 다른 걸 처리하자."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-005",
+      "slice": "idiom-business",
+      "direction": "en_to_ko",
+      "source": "She hit the ground running.",
+      "baselineOutput": {
+        "natural": "그녀는 즉시 일을 시작했다.",
+        "literal": "그녀는 땅에 발을 디뎠다.",
+        "nuance": "이 표현은 누군가가 새로운 직책이나 역할을 맡은 후 즉시 능력과 열정을 보여주는 상황에서 쓰인다. 일반적으로 긍정적인 맥락에서 사용된다.",
+        "tip": "한국어로 '그녀는 땅에 발을 디뎠다'처럼 직역하면 의미가 완전히 달라지므로 주의해야 한다.",
+        "alternatives": [
+          {
+            "label": "일반적인 상황",
+            "register": "neutral",
+            "expressions": [
+              "그녀는 바로 일을 시작했다.",
+              "그녀는 즉시 업무에 들어갔다."
+            ]
+          },
+          {
+            "label": "격식 있는 자리",
+            "register": "formal",
+            "expressions": [
+              "그녀는 즉시 업무에 착수했다.",
+              "그녀는 새로운 역할을 맡은 후 즉시 활동을 시작했다."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-011",
+      "slice": "idiom-business",
+      "direction": "ko_to_en",
+      "source": "말씀 편하게 하세요.",
+      "baselineOutput": {
+        "natural": "Go ahead, please feel free to speak.",
+        "literal": "",
+        "nuance": "This is a polite way to encourage someone to speak openly, often used in informal or semi-formal settings.",
+        "tip": "Avoid using overly literal translations like 'Speak comfortably' as they may sound unnatural to English speakers.",
+        "alternatives": [
+          {
+            "label": "Most common in informal settings",
+            "register": "casual",
+            "expressions": [
+              "Feel free to speak up.",
+              "Don't hesitate to say what's on your mind."
+            ]
+          },
+          {
+            "label": "More formal or professional settings",
+            "register": "neutral",
+            "expressions": [
+              "Please don't hesitate to share your thoughts.",
+              "You're welcome to speak freely."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-012",
+      "slice": "idiom-business",
+      "direction": "ko_to_en",
+      "source": "잘 부탁드립니다.",
+      "baselineOutput": {
+        "natural": "I'll leave it to you.",
+        "literal": "",
+        "nuance": "This is a polite way of asking someone to take responsibility for a task. It's commonly used in professional or formal settings.",
+        "tip": "Avoid using overly formal or literal translations like 'I will politely request you to do it.' — they sound unnatural to English speakers.",
+        "alternatives": [
+          {
+            "label": "Most common usage",
+            "register": "formal",
+            "expressions": [
+              "I'll leave it to you.",
+              "You take care of it.",
+              "You handle it."
+            ]
+          },
+          {
+            "label": "Casual or friendly usage",
+            "register": "casual",
+            "expressions": [
+              "You've got this.",
+              "You take it from here.",
+              "You're on it."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-013",
+      "slice": "idiom-business",
+      "direction": "ko_to_en",
+      "source": "검토 후 회신 부탁드립니다.",
+      "baselineOutput": {
+        "natural": "Please reply after reviewing.",
+        "literal": "",
+        "nuance": "This is a polite and professional way to ask someone to respond after they have reviewed something. It is commonly used in business or formal communication.",
+        "tip": "Avoid using overly formal or stiff expressions like 'I request your reply after you have completed your review' unless in a very formal or official context.",
+        "alternatives": [
+          {
+            "label": "Most common formal expression",
+            "register": "formal",
+            "expressions": [
+              "Please reply after reviewing.",
+              "Kindly respond after you have reviewed the document."
+            ]
+          },
+          {
+            "label": "Casual alternative",
+            "register": "casual",
+            "expressions": [
+              "Let me know once you've checked it.",
+              "Hit me up after you look it over."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-014",
+      "slice": "idiom-business",
+      "direction": "ko_to_en",
+      "source": "양해 부탁드립니다.",
+      "baselineOutput": {
+        "natural": "Please understand.",
+        "literal": "",
+        "nuance": "This is a polite and neutral way to ask someone to understand a situation, often used in professional or formal contexts.",
+        "tip": "Avoid using overly formal expressions like 'I humbly request your understanding' unless in a very formal or written context.",
+        "alternatives": [
+          {
+            "label": "Most common usage",
+            "register": "neutral",
+            "expressions": [
+              "Please understand.",
+              "I hope you can understand."
+            ]
+          },
+          {
+            "label": "Casual or informal usage",
+            "register": "casual",
+            "expressions": [
+              "Get it?",
+              "You know what I mean?"
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idb-015",
+      "slice": "idiom-business",
+      "direction": "ko_to_en",
+      "source": "고객 눈높이에 맞춰서 설명해 주세요.",
+      "baselineOutput": {
+        "natural": "Please explain it in a way that's easy for the customer to understand.",
+        "literal": "",
+        "nuance": "This is a polite and professional way to ask someone to explain something clearly, often used in customer service or business settings.",
+        "tip": "Avoid using overly formal or technical language when translating this phrase, as it may sound unnatural in casual contexts.",
+        "alternatives": [
+          {
+            "label": "Most common in professional settings",
+            "register": "neutral",
+            "expressions": [
+              "Please explain it in a way that's easy to understand.",
+              "Can you explain this in simpler terms?"
+            ]
+          },
+          {
+            "label": "Casual conversation",
+            "register": "casual",
+            "expressions": [
+              "Can you break it down for me?",
+              "Tell me like I'm five."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-001",
+      "slice": "idiom-casual",
+      "direction": "en_to_ko",
+      "source": "I have butterflies in my stomach.",
+      "baselineOutput": {
+        "natural": "제가 너무 긴장해서 마음이 허물어지는 것 같아요.",
+        "literal": "제가 배에 나비가 있는 것 같아요.",
+        "nuance": "이 표현은 긴장하거나 설렘을 느낄 때 사용하며, 친밀한 관계나 일상적인 상황에서 자연스럽게 쓰인다.",
+        "tip": "한국어로 '배에 나비가 있다'고 직역하면 문맥이 틀려서 오해를 줄 수 있으니, 감정을 표현하는 문장을 사용하는 것이 좋습니다.",
+        "alternatives": [
+          {
+            "label": "일상적인 상황",
+            "register": "casual",
+            "expressions": [
+              "제가 너무 긴장해서 마음이 허물어지는 것 같아요.",
+              "제가 마음이 떨리고 있어요."
+            ]
+          },
+          {
+            "label": "격식 있는 자리",
+            "register": "formal",
+            "expressions": [
+              "저는 현재 매우 긴장하고 있습니다.",
+              "저는 설렘을 느끼고 있습니다."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-002",
+      "slice": "idiom-casual",
+      "direction": "en_to_ko",
+      "source": "You can say that again.",
+      "baselineOutput": {
+        "natural": "그 말 다시 해줘도 괜찮아.",
+        "literal": "",
+        "nuance": "이 표현은 누군가가 말을 했을 때, 그 말이 마음에 들거나 공감이 가서 반복하고 싶다고 말하는 상황에서 쓰인다. 친구나 가족 사이에서 자연스럽게 쓰인다.",
+        "tip": "한국어로 '그 말 다시 해줘도 괜찮아'라고 하면, 영어 원어민은 'You can say that again.'이라고 말할 수 있다. 단순히 '다시 말해줘'라고 하면, 'Say that again.'이라고 해도 된다.",
+        "alternatives": [
+          {
+            "label": "가장 일반적",
+            "register": "casual",
+            "expressions": [
+              "그 말 다시 해줘도 괜찮아.",
+              "그렇게 말해줘서 고마워.",
+              "그 말 다시 해줘."
+            ]
+          },
+          {
+            "label": "격식 있는 자리",
+            "register": "formal",
+            "expressions": [
+              "그 말씀 다시 해주시면 감사하겠습니다.",
+              "그 말씀을 다시 해주셔서 감사합니다."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-003",
+      "slice": "idiom-casual",
+      "direction": "en_to_ko",
+      "source": "Break a leg!",
+      "baselineOutput": {
+        "natural": "잘 가라!",
+        "literal": "",
+        "nuance": "영어 원어민은 이 표현을 친구나 동료가 중요한 시험, 연주, 경기에 앞서 축복하거나 격려할 때 사용한다. 이는 '행운을 빌어라' 또는 '잘 해내길 바란다'는 의미로, 비공식적인 분위기에서 쓰인다.",
+        "tip": "한국어로 '잘 가라'는 표현은 영어의 'break a leg'보다 더 강한 의미를 담고 있어, 상황에 따라 과도하게 느껴질 수 있다.",
+        "alternatives": [
+          {
+            "label": "일반적인 격려",
+            "register": "casual",
+            "expressions": [
+              "잘 해내길 바라",
+              "행운을 빌어",
+              "잘 가라"
+            ]
+          },
+          {
+            "label": "공식적인 격려",
+            "register": "formal",
+            "expressions": [
+              "성공을 기원합니다",
+              "행운을 빕니다",
+              "좋은 결과를 기대합니다"
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-004",
+      "slice": "idiom-casual",
+      "direction": "en_to_ko",
+      "source": "I'm feeling a bit under the weather today.",
+      "baselineOutput": {
+        "natural": "오늘은 좀 몸이 안 좋네요.",
+        "literal": "",
+        "nuance": "이 표현은 친구나 가족과의 대화에서 자연스럽게 쓰이며, 경미한 건강 문제를 언급할 때 사용됩니다.",
+        "tip": "한국어로 '몸이 안 좋다'고 표현할 때는 일반적으로 '아프다'보다는 '몸이 안 좋다'가 더 자연스럽고, 경미한 상태를 나타내는 데 적합합니다.",
+        "alternatives": [
+          {
+            "label": "일상적인 대화",
+            "register": "casual",
+            "expressions": [
+              "오늘은 좀 피곤해요.",
+              "오늘은 몸이 좀 안 좋아요."
+            ]
+          },
+          {
+            "label": "조금 더 격식 있는 상황",
+            "register": "neutral",
+            "expressions": [
+              "오늘은 건강 상태가 좋지 않아요.",
+              "오늘은 몸이 약해 보여요."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-005",
+      "slice": "idiom-casual",
+      "direction": "en_to_ko",
+      "source": "That name rings a bell.",
+      "baselineOutput": {
+        "natural": "그 이름은 좀耳에 익은 것 같아.",
+        "literal": "",
+        "nuance": "이 표현은 누군가의 이름이나 이름을 듣고 그 사람을 기억하지 못하나, 어딘가에서 본 적이 있다고 느낄 때 사용됩니다. 상대방에게 약간의 유감을 표현하면서도 부드럽게 말하는 방식입니다.",
+        "tip": "한국어로 '그 이름은 좀 귀에 익은 것 같아'라고 표현할 때, '귀에 익은'이라는 표현은 영어의 'rings a bell'과 유사한 의미를 가지지만, 'ring a bell'은 더 부드럽고 애매한 느낌을 줍니다.",
+        "alternatives": [
+          {
+            "label": "일반적인 대화",
+            "register": "neutral",
+            "expressions": [
+              "그 이름은 좀 익숙한 것 같아.",
+              "그 이름은 어디서 들어 본 것 같아."
+            ]
+          },
+          {
+            "label": "친한 친구 사이",
+            "register": "casual",
+            "expressions": [
+              "그 이름은 좀 귀에 익은 것 같아.",
+              "그 이름은 어디서 본 적 있어?"
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": true,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-011",
+      "slice": "idiom-casual",
+      "direction": "ko_to_en",
+      "source": "밥 먹었어?",
+      "baselineOutput": {
+        "natural": "Have you eaten yet?",
+        "literal": "",
+        "nuance": "This is a casual way to ask if someone has eaten. It's commonly used among friends or family members.",
+        "tip": "Avoid using overly formal expressions like 'Have you consumed your meal?' as they sound unnatural in casual conversation.",
+        "alternatives": [
+          {
+            "label": "Most common (casual)",
+            "register": "casual",
+            "expressions": [
+              "Have you eaten yet?",
+              "Did you eat?",
+              "Have you had dinner?"
+            ]
+          },
+          {
+            "label": "More formal",
+            "register": "formal",
+            "expressions": [
+              "Have you had your meal?",
+              "Have you eaten yet?",
+              "Have you had lunch?"
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-012",
+      "slice": "idiom-casual",
+      "direction": "ko_to_en",
+      "source": "수고하셨습니다.",
+      "baselineOutput": {
+        "natural": "You did a great job.",
+        "literal": "",
+        "nuance": "This is a common way to express appreciation for someone's effort in an informal or neutral setting.",
+        "tip": "Avoid overly formal expressions like 'I appreciate your hard work' unless the context is very formal.",
+        "alternatives": [
+          {
+            "label": "General appreciation",
+            "register": "neutral",
+            "expressions": [
+              "Well done.",
+              "Good job.",
+              "You did a great job."
+            ]
+          },
+          {
+            "label": "More casual",
+            "register": "casual",
+            "expressions": [
+              "Nice work!",
+              "You rock!",
+              "Awesome job!"
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-013",
+      "slice": "idiom-casual",
+      "direction": "ko_to_en",
+      "source": "어떡해, 손이 미끄러졌어.",
+      "baselineOutput": {
+        "natural": "Oh no, I slipped.",
+        "literal": "",
+        "nuance": "This is a casual expression used when someone accidentally slips, often expressing surprise or concern.",
+        "tip": "Avoid using overly dramatic expressions like 'I fell off the cliff!' unless the situation is extremely severe.",
+        "alternatives": [
+          {
+            "label": "Most common",
+            "register": "casual",
+            "expressions": [
+              "Oh no, I slipped.",
+              "Oh my god, I slipped!",
+              "I slipped!"
+            ]
+          },
+          {
+            "label": "More formal",
+            "register": "neutral",
+            "expressions": [
+              "I slipped.",
+              "I had an accident and slipped."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-014",
+      "slice": "idiom-casual",
+      "direction": "ko_to_en",
+      "source": "걔는 귀가 얇아.",
+      "baselineOutput": {
+        "natural": "She has thin ears.",
+        "literal": "",
+        "nuance": "This is a literal translation, but in English, it's not a common way to describe someone. It might be more natural to say 'She has delicate ears' or 'Her ears are very thin.'",
+        "tip": "In English, describing someone's ears as 'thin' is not common. It might be better to use more descriptive terms like 'delicate' or 'small.'",
+        "alternatives": [
+          {
+            "label": "General description",
+            "register": "neutral",
+            "expressions": [
+              "She has thin ears.",
+              "Her ears are very thin."
+            ]
+          },
+          {
+            "label": "More descriptive",
+            "register": "neutral",
+            "expressions": [
+              "She has delicate ears.",
+              "Her ears are quite thin."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    },
+    {
+      "id": "hbx-idc-015",
+      "slice": "idiom-casual",
+      "direction": "ko_to_en",
+      "source": "속이 다 시원하다.",
+      "baselineOutput": {
+        "natural": "I feel so relieved.",
+        "literal": "",
+        "nuance": "This expression is used in casual conversation to convey a sense of relief or comfort after a stressful situation.",
+        "tip": "Avoid using overly literal translations like 'My whole body is cool' as they don't convey the intended meaning in English.",
+        "alternatives": [
+          {
+            "label": "Casual conversation",
+            "register": "casual",
+            "expressions": [
+              "I feel so much better now.",
+              "That was a weight off my mind."
+            ]
+          },
+          {
+            "label": "More formal context",
+            "register": "neutral",
+            "expressions": [
+              "I am greatly relieved.",
+              "I feel a sense of relief."
+            ]
+          }
+        ]
+      },
+      "baselineHanjaLeak": false,
+      "meaningDistortion": null,
+      "hanjaLeak": null,
+      "verdict": null,
+      "reviewerNote": ""
+    }
+  ]
+}

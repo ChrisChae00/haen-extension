@@ -26,10 +26,10 @@ compliance, latency, cost, and LLM judgement.
 | Models measured | 7 (gemini-3.7-flash, gemini-3.5-flash-lite, gpt-oss-120b, gpt-oss-20b, qwen3.6-27b, local qwen3:14b think/no-think) |
 | Dataset | 212 items (FLORES-200 devtest 200 + 12 hand-written) + 40 judge-only idiom items, both directions |
 | Total API calls (2026-08-22 measurement snapshot) | 3,200+ (212 × 2–3 runs per model) |
-| Measurement axes | COMET · chrF++ · BLEU · 14-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
+| Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
 | Paid judge verdicts (2026-08-22 snapshot) | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
 | Total paid measurement cost (2026-08-22 snapshot) | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
-| Harness tests (2026-08-26) | 61 passing (zero dependencies) |
+| Harness tests (2026-08-26) | 67 passing (zero dependencies) |
 
 ---
 
@@ -44,8 +44,11 @@ Decomposed the thinking budget by measurement, identified the bottleneck, remove
 | latency p50 | 40,087 ms | **16,211 ms** (−60%) |
 | **TTFB p50** | 25,144 ms | **534 ms** (−98%, 47×) |
 | COMET | 0.8849 | 0.8861 (CIs overlap, no regression) |
-| 14-check schema compliance | 100% | 99.5% |
+| schema compliance (worst rule) | 100% | 99.5% |
 
+> Re-scored on 2026-08-26 under the 15-check suite: both numbers are unchanged, and the no-think
+> run's 99.5% floor is now tied by two rules (`altsSizesValid` and the new `langTagsMatchDirection`).
+>
 > Method: used ollama's native timing fields to separate prefill / thinking / decode → confirmed
 > thinking was 59% (24s) of total latency → threaded the `reasoning_effort` option through the
 > client and ran a full A/B over all 212 items. Prompt shrinking turned out to be worth at most
@@ -127,9 +130,11 @@ broker routing rather than model behaviour.
   `dev` split, guaranteeing structural zero overlap (not yet executed; the rule is settled)
 - **Reproducibility**: every run records `promptHash` / `datasetChecksums` / git sha / model id.
   Differing hashes are flagged as not comparable
-- **The danger of a single number**: compliance in the summary table is the **lowest of the 14 implemented
+- **The danger of a single number**: compliance in the summary table is the **lowest of the 15 implemented
   checks plus the check name**. An average, or one representative check, lies for as long as perfect scores
-  keep coming
+  keep coming. The 15th (`langTagsMatchDirection`, added 2026-08-26) is what a "plus the check name" column
+  is for: it caught a baseline item that emits the language tags exactly reversed on all three runs, which
+  every other instrument — COMET included — is blind to
 - **Fixed judge**: LLM-as-judge uses the same model, the same rubric hash, and the same 12 items
   across all 5 runs. If judges are mixed, the report prints "not comparable"
 - **Known limitations stated in the report**: judge n=12, dirty-git-tree flag
@@ -138,9 +143,10 @@ broker routing rather than model behaviour.
 
 ## Not done yet (honestly)
 
-- LoRA fine-tuning has not started, so **no tuning win has been published and none can be**. The
-  comparability, complete-sample and payload-hash blockers were closed in code on 2026-08-26
-  ([ENGINEERING-LOG.md §7.1](ENGINEERING-LOG.md#71-the-blockers-that-were-code-fixed-2026-08-26)); still
-  open before evaluation are the same-serving untuned control, `/no_think` provenance in `promptHash`,
-  the direction-aware language-tag check, and the frozen 20-ID manual set
-  ([§7](ENGINEERING-LOG.md#7-fine-tuning-phase-14-review-2026-08-26)).
+- LoRA fine-tuning has not started, so **no tuning win has been published and none can be**. Six of the
+  seven pre-evaluation blockers were closed in code on 2026-08-26 — comparability, complete-sample and
+  payload-hash ([§7.1](ENGINEERING-LOG.md#71-the-blockers-that-were-code-fixed-2026-08-26)), then
+  `/no_think` provenance in `promptHash`, the direction-aware language-tag check, and the frozen 20-ID
+  manual list ([§7.2](ENGINEERING-LOG.md#72-three-more-blockers-closed-2026-08-26)). Still open: the
+  **item-level verdicts** for those 20 ids, which must be recorded before any tuned output exists, and
+  the **same-serving untuned control run**, which needs the `/no_think` setting it now has.

@@ -40,18 +40,27 @@ function gitState() {
 }
 
 /**
- * Hash of the exact system prompts this run used.
+ * Hash of the exact prompt text this run sent.
  *
  * This is the single most useful field in config.json. Model ids and dataset versions
  * are easy to remember; a quietly edited sentence in src/prompts.js is not, and it moves
  * scores as much as a model swap does. If two runs disagree and their prompt hashes
  * differ, the comparison was never valid.
+ *
+ * `promptSuffix` is in here because it is prompt text, not routing. The Ollama
+ * experimental runner ignores `reasoning_effort: "none"` and only obeys Qwen3's native
+ * `/no_think` tag in the message, so a run can have thinking on or off with the same
+ * `reasoningEffort` value - and before this was hashed, those two runs produced an
+ * identical promptHash and passed the pairwise comparability gate as equivalent.
+ * Always hashed, never conditionally: an unset suffix updates the digest with an empty
+ * string, which is a no-op, so every run recorded before this existed keeps its hash.
  */
-function promptHash(uiLanguage) {
+export function promptHash(uiLanguage, promptSuffix = '') {
   const h = createHash('sha256');
   for (const direction of ['auto', 'ko_to_en', 'en_to_ko']) {
     h.update(buildSystemPrompt(uiLanguage, direction));
   }
+  h.update(promptSuffix);
   return h.digest('hex');
 }
 
@@ -162,10 +171,11 @@ async function main() {
     limit,
     itemCount: items.length,
     datasetChecksums: checksums,
-    promptHash: promptHash(config.uiLanguage ?? 'ko'),
+    promptHash: promptHash(config.uiLanguage ?? 'ko', config.promptSuffix ?? ''),
+    promptSuffix: config.promptSuffix ?? '',
     // Bumped whenever a compliance check or judge rubric changes meaning. Two runs with
     // different scoringVersion values are not comparable even at identical promptHash.
-    scoringVersion: 1,
+    scoringVersion: 2,
     judgeModelId: config.judgeModelId ?? null,
     harnessVersion: HARNESS_VERSION,
     nodeVersion: process.version,

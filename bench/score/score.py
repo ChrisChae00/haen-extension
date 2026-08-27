@@ -29,16 +29,16 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-SCORING_VERSION = 1
+SCORING_VERSION = 2
 
 # Checks where True means the model behaved. Everything else is a failure flag.
 POSITIVE_CHECKS = {
-    "jsonValid", "hasAllRequired", "naturalNonEmpty", "nuanceNonEmpty",
+    "jsonValid", "hasAllRequired", "langTagsMatchDirection", "naturalNonEmpty", "nuanceNonEmpty",
     "altsPresent", "altsExactlyTwo", "altsSizesValid", "altsRegistersValid",
 }
 FAILURE_CHECKS = ["empty", "fenced", "prosePreamble", "hanjaLeak", "salvaged", "retried"]
 COMPLIANCE_ORDER = [
-    "jsonValid", "hasAllRequired", "naturalNonEmpty", "nuanceNonEmpty",
+    "jsonValid", "hasAllRequired", "langTagsMatchDirection", "naturalNonEmpty", "nuanceNonEmpty",
     "altsExactlyTwo", "altsSizesValid", "altsRegistersValid",
     "hanjaLeak", "fenced", "prosePreamble", "salvaged", "retried", "empty",
 ]
@@ -224,8 +224,7 @@ def operational(records, config, pricing):
 
 def compliance_rates(records):
     out = {}
-    n = len(records)
-    if not n:
+    if not records:
         return out
     keys = set()
     for r in records:
@@ -235,7 +234,17 @@ def compliance_rates(records):
     # have to be reproducible - "score the same predictions twice, get the same file" is
     # the check that proves scoring adds no non-determinism of its own.
     for key in sorted(keys):
-        hits = sum(1 for r in records if (r.get("compliance") or {}).get(key))
+        # Denominator is "records that carry this key", not "all records". A check added
+        # after a run was recorded is absent from that run's rows, and counting absent as
+        # False would print a brand-new check as 0% for every historical model - a
+        # measurement that never happened, reported as total failure. Rows predating the
+        # check are excluded; rescore.js (`npm run rescore`) recomputes them from the
+        # stored raw output when the real number is wanted.
+        scored = [r for r in records if key in (r.get("compliance") or {})]
+        n = len(scored)
+        if not n:
+            continue
+        hits = sum(1 for r in scored if r["compliance"].get(key))
         # Report everything as "rate at which the model did the right thing".
         rate = hits / n if key in POSITIVE_CHECKS else 1 - (hits / n)
         out[key] = round(rate, 4)

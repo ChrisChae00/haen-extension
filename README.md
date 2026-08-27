@@ -27,11 +27,11 @@ Built with a focus on performance, reliability, and user experience, Haen showca
 - **Robust Design System & A11y**: Built a custom token-based theme engine enforcing accessibility contrast standards, with seamless 3-way theme control (Light/Dark/System) and smooth transitions.
 - **Multi-Provider LLM Support**: Dynamically handles APIs from Groq, OpenRouter, and Google (Gemini), automatically adjusting payload parameters based on provider requirements.
 - **Reproducible Benchmark Harness**: Built a KO↔EN benchmark (FLORES-200 + hand-built, n=212 × 2–3 runs)
-  that scores every model Haen can call on COMET, chrF++, 14-check compliance, latency, streaming TTFB and
+  that scores every model Haen can call on COMET, chrF++, 15-check compliance, latency, streaming TTFB and
   cost — pinning the git SHA, dataset checksums and a system-prompt hash to each result, and flagging runs
   measured on a dirty tree so the cross-model table can't silently compare two different harnesses.
   Across six models the COMET confidence intervals **all overlap (0.8849–0.8932)**: quality does not
-  separate them, so the harness reports what does. A local `qwen3:14b` (Q4) holds **100% on all 14 implemented checks at
+  separate them, so the harness reports what does. A local `qwen3:14b` (Q4) holds **100% on all 15 implemented checks at
   $0** — while `qwen3.6-27b`, statistically tied on COMET, prefixes 46% of its answers with prose the schema
   forbids. See [`bench/REPORT.md`](bench/REPORT.md).
 - **Latency work driven by measurement, not guesswork**: Splitting the local model's wall clock into
@@ -39,9 +39,9 @@ Built with a focus on performance, reliability, and user experience, Haen showca
   worth at most 3s. Disabling reasoning cut **latency p50 40.1s → 16.2s and streaming TTFB 25.1s → 0.53s
   (47×)** with no COMET regression (0.8849 → 0.8861, overlapping CIs) — paid for with judge-scored `tip`
   groundedness, which is now the fine-tuning target rather than a serving default.
-- **Fast Test Suite**: Zero-dependency `node --test` suite covering the 14 implemented schema and Hanja compliance checks
+- **Fast Test Suite**: Zero-dependency `node --test` suite covering the 15 implemented schema and Hanja compliance checks
   plus reasoning-model output parsing, pool pacing, and the key-rotation / run-stop logic that decides
-  whether a benchmark keeps recording — **57 tests**.
+  whether a benchmark keeps recording — **67 tests**.
 
 ---
 
