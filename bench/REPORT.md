@@ -57,6 +57,7 @@ Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120
 | gemini-3.7-flash | 12 | 100.0% | 75.0% | 83.3% | 100.0% |
 | gemini-3.7-flash-ext | 40 | 100.0% | 95.0% | 82.5% | 97.5% |
 | qwen3-14b-nothink-ext | 40 | 70.0% | 30.0% | 52.5% | 70.0% |
+| qwen3-14b-untuned-control-ext | 40 | 72.5% | 27.5% | 47.5% | 50.0% |
 
 > Judge: `anthropic/claude-sonnet-5`, binary rubric. **Rows are not all scored on the same items** - read the `n` column, and compare only rows that share it.
 > Judge scores carry the judge's own biases and are for relative comparison

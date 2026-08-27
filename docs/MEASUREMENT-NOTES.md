@@ -322,3 +322,35 @@ under. It now means **the version that computed the stored compliance** — `npm
 after re-deriving — and judge verdicts are covered separately by their own `rubricHash`. The constant
 lives in `compliance.js` with a changelog, `run.js` imports it, and `test_score.py` fails if the Python
 mirror drifts.
+
+---
+
+## 9. Refusing to compute a statistic (2026-08-27)
+
+**The situation** The tuning plan asked for two comparisons: tuned vs the untuned control (does LoRA
+do anything) and tuned vs the product baseline `qwen3:14b` (is this better than what ships). The
+second pair does not share a transport — different runner, different quantisation, different template,
+and a `/no_think` suffix on one side — so `validateComparableConfigs` rejects it.
+
+**Why that rejection is right, with a number** The control exists precisely to measure this confound,
+and it did: with weights that are mathematically identical to the baseline's, **31 of 40 `natural`
+outputs differ**. A sign test across that pair would answer "are these two products different", which
+is already obvious, while being read as "did fine-tuning work".
+
+**Chosen** Significance is claimed only for tuned vs control. The product comparison is reported as
+descriptive statistics — win/loss/tie counts and the absolute rate table — with no p-value computed
+and none quoted, labelled as a comparison between two products whose serving paths differ.
+
+**Rejected — an override flag on the comparability gate.** The gate would have grown a
+`--allow-transport-diff` escape hatch, and every future run that hit the guard would reach for it.
+A guard with a documented bypass is a suggestion.
+
+**Rejected — re-measuring the product baseline on the experimental runner to make the pair
+comparable.** It would pass the gate and answer the wrong question: a `qwen3:14b` served through the
+experimental import is not the product. The product comparison is *supposed* to include the serving
+change, because shipping the tuned model means shipping that path too. What must not happen is
+dressing that comparison up as a controlled experiment.
+
+**The general rule this is an instance of.** When a measurement's preconditions fail, the honest
+options are to fix the preconditions or to report the measurement without the statistic that assumed
+them. Computing it anyway and adding a caveat is not a third option — the number outlives the caveat.
