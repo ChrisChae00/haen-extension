@@ -29,7 +29,7 @@ compliance, latency, cost, and LLM judgement.
 | Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
 | Paid judge verdicts | 356 (`claude-sonnet-5`, fixed, $0.0095 each) — 316 at the 2026-08-22 snapshot, +40 for the untuned control on 2026-08-27 |
 | Total paid measurement cost | ~$8.3 (OpenRouter $6.7 + Google AI Studio $1.6); $7.9 at the 2026-08-22 snapshot, +$0.38 for the control's judge run |
-| Harness tests (2026-08-27) | 69 passing (zero dependencies) |
+| Harness tests (2026-08-27) | 70 passing (zero dependencies) |
 
 ---
 

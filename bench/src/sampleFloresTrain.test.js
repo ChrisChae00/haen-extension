@@ -30,3 +30,41 @@ test('training sentences do not overlap the evaluation sets', (t) => {
   const overlap = [...train].filter(s => evalStrings.has(s));
   assert.deepEqual(overlap, [], `${overlap.length} sentence(s) appear in both training and evaluation data`);
 });
+
+// The test above guards `train/raw.jsonl`, which only the FLORES sampler writes. The
+// files mlx_lm.lora actually reads are built downstream, so anything hand-added straight
+// to them - an idiom set pasted in to fix the training/eval distribution mismatch, say -
+// never passes the check above. Guard the files the trainer opens.
+test('the files the trainer reads do not overlap the evaluation sets', (t) => {
+  const trainFiles = ['train.jsonl', 'valid.jsonl'].map(n => path.join(DATASETS_DIR, 'train/teacher', n));
+  const present = trainFiles.filter(existsSync);
+  if (!present.length) return t.skip('no teacher training set built yet');
+
+  const evalFiles = ['flores.jsonl', 'handbuilt.jsonl', 'handbuilt-ext.jsonl']
+    .map(n => path.join(DATASETS_DIR, 'v1', n));
+  const evalStrings = strings(evalFiles.flatMap(read));
+
+  // Both directions. An eval source can leak in as a training input (user message), and
+  // it can equally leak in as a training target: eval item hbx-idc-018 asks for
+  // "눈치 좀 챙겨" -> "Read the room", so a training pair running the other way teaches
+  // the answer just as effectively as one running the same way.
+  // Exact match only, and that is a floor rather than a proof: a training sentence that
+  // *contains* an eval string ("Read the room and play it by ear" against hbx-idc-018's
+  // "Read the room.") is real leakage this does not see. Substring matching was the
+  // obvious upgrade and was rejected - eval items are short enough ("Break a leg!") that
+  // it fires on innocent text, and a check that cries wolf gets muted, which is strictly
+  // worse than one with a known blind spot. Reviewing added data by hand stays required.
+  const overlap = [];
+  for (const file of present) {
+    for (const { messages } of read(file)) {
+      const user = messages.find(m => m.role === 'user')?.content?.trim();
+      if (user && evalStrings.has(user)) overlap.push(`${path.basename(file)}: input ${JSON.stringify(user)}`);
+
+      const assistant = messages.find(m => m.role === 'assistant')?.content;
+      let natural;
+      try { natural = JSON.parse(assistant)?.natural?.trim(); } catch { /* malformed rows are 4.3's problem, not this test's */ }
+      if (natural && evalStrings.has(natural)) overlap.push(`${path.basename(file)}: target ${JSON.stringify(natural)}`);
+    }
+  }
+  assert.deepEqual(overlap, [], `${overlap.length} training record(s) carry an evaluation sentence`);
+});

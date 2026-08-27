@@ -71,3 +71,5 @@ __pycache__/
 .venv-mlx/
 bench/tuning/zero-adapter/
 bench/tuning/fused-untuned-control/
+bench/tuning/adapters-run*/
+bench/tuning/fused-run*/
