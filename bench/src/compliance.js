@@ -1,3 +1,5 @@
+import { stripThinking } from '../../src/apiClient.js';
+
 // Instruction-compliance scoring for Haen's structured output.
 //
 // Haen doesn't emit a translation string, it emits a JSON object with five fields
@@ -81,6 +83,20 @@ function tagsMatchDirection(parsed, direction) {
  */
 export function checkCompliance(raw, parsed, item, { uiLanguage = 'ko', salvaged = false, retries = 0 } = {}) {
   const text = (raw ?? '').trim();
+  // Shape checks read the text with the reasoning block removed, because that is the text
+  // the client parses and the user receives (apiClient strips it before anything else).
+  //
+  // Without this, a transport that emits an empty `<think></think>` - which is exactly what
+  // Qwen3's `/no_think` produces on the Ollama experimental runner - scores 0% on
+  // prosePreamble for every single item, because the body no longer starts with `{`. That
+  // is a fact about the serving path, not about whether the model followed the format
+  // instruction, and since the summary column reports the worst rule it would have
+  // published the tuned candidate and its control at 0% compliance.
+  //
+  // `empty` deliberately still reads `raw`: it asks whether a response arrived at all,
+  // which is a transport question, while these two ask whether the model formatted the
+  // answer as instructed.
+  const body = stripThinking(text).trim();
   const alts = Array.isArray(parsed?.alternatives) ? parsed.alternatives : null;
 
   return {
@@ -94,9 +110,9 @@ export function checkCompliance(raw, parsed, item, { uiLanguage = 'ko', salvaged
     // The prompt says "no markdown, no code fences". apiClient strips them anyway
     // (apiClient.js:99), so this never reaches the user - but it's a clean signal of
     // how well a model follows a negative instruction.
-    fenced: text.startsWith('```'),
+    fenced: body.startsWith('```'),
     // Prose before the JSON object. Same story: salvageable, but diagnostic.
-    prosePreamble: text.length > 0 && !text.startsWith('{') && !text.startsWith('```'),
+    prosePreamble: body.length > 0 && !body.startsWith('{') && !body.startsWith('```'),
 
     // --- required fields ---
     hasAllRequired: REQUIRED_STRING_FIELDS.every(f => typeof parsed?.[f] === 'string' && parsed[f].length > 0),
@@ -129,6 +145,14 @@ export const POSITIVE_CHECKS = new Set([
   'jsonValid', 'hasAllRequired', 'langTagsMatchDirection', 'naturalNonEmpty', 'nuanceNonEmpty',
   'altsPresent', 'altsExactlyTwo', 'altsSizesValid', 'altsRegistersValid',
 ]);
+
+// Bumped whenever a check changes what it means. Two runs whose stored compliance was
+// computed at different versions are not comparable; `npm run rescore` re-derives an old
+// run's compliance from its raw output and stamps this into its config.json.
+//   1: the original 14 checks
+//   2: + langTagsMatchDirection (2026-08-26)
+//   3: shape checks read the thinking-stripped body (2026-08-27)
+export const SCORING_VERSION = 3;
 
 export const ALL_CHECKS = [
   'jsonValid', 'empty', 'fenced', 'prosePreamble',

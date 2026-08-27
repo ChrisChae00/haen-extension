@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkCompliance } from './compliance.js';
+import { checkCompliance, SCORING_VERSION } from './compliance.js';
 import { loadDataset } from './dataset.js';
 
 // Recompute the compliance block of a finished run from its stored raw output.
@@ -66,6 +66,19 @@ function main() {
   const temp = `${file}.tmp`;
   writeFileSync(temp, rescored.map(record => JSON.stringify(record)).join('\n') + '\n');
   renameSync(temp, file);
+
+  // config.json's scoringVersion is stamped at run time, but after a rescore the stored
+  // compliance was computed by *this* version - and validateComparableConfigs compares
+  // that field. Leaving it at the run-time value makes a rescored old run permanently
+  // "not comparable" to a new one, which is the opposite of what the rescore achieved.
+  // Only compliance is re-derived here; judge verdicts carry their own rubricHash.
+  if (config.scoringVersion !== SCORING_VERSION) {
+    const configFile = path.join(dir, 'config.json');
+    const temp = `${configFile}.tmp`;
+    writeFileSync(temp, JSON.stringify({ ...config, scoringVersion: SCORING_VERSION }, null, 2) + '\n');
+    renameSync(temp, configFile);
+    console.log(`  scoringVersion ${config.scoringVersion} -> ${SCORING_VERSION} (compliance re-derived; judge verdicts untouched)`);
+  }
   console.log('  rewritten. Re-run score/score.py to refresh metrics.json.');
 }
 

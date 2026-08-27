@@ -115,3 +115,18 @@ test('language tags must agree with the forced direction, not merely be non-empt
   assert.equal(checkCompliance('{}', { ...parsed, target_lang: 'JA' }, item).langTagsMatchDirection, false);
   assert.equal(checkCompliance('{}', null, item).langTagsMatchDirection, false);
 });
+
+test('an empty reasoning block is not a prose preamble', () => {
+  // What Qwen3's /no_think produces on the Ollama experimental runner. The client strips
+  // it before parsing, so the user never sees it and the model did follow the format.
+  const body = '{"detected_lang":"KO","target_lang":"EN","natural":"Hi.","nuance":"설명"}';
+  const withThink = `<think>\n\n</think>\n\n${body}`;
+  assert.equal(checkCompliance(withThink, JSON.parse(body), KO_TO_EN).prosePreamble, false);
+  // A real preamble is still caught, with or without a reasoning block in front of it.
+  assert.equal(checkCompliance(`Here you go: ${body}`, JSON.parse(body), KO_TO_EN).prosePreamble, true);
+  assert.equal(checkCompliance(`<think>hmm</think>Here you go: ${body}`, JSON.parse(body), KO_TO_EN).prosePreamble, true);
+  // So is a fence hiding behind one.
+  assert.equal(checkCompliance('<think>hmm</think>```json\n{}\n```', {}, KO_TO_EN).fenced, true);
+  // `empty` still asks whether a response arrived at all, not whether it said anything.
+  assert.equal(checkCompliance('<think>\n\n</think>', null, KO_TO_EN).empty, false);
+});
