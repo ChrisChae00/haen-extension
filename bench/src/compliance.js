@@ -47,6 +47,33 @@ function hasHanja(parsed, uiLanguage, direction) {
 const VALID_REGISTERS = new Set(['neutral', 'casual', 'formal', 'contextual']);
 
 /**
+ * What the prompt demands the language tags say, per forced direction.
+ *
+ * src/prompts.js:66 spells this out as a hard instruction ("Force direction: Korean →
+ * English. detected_lang must be KO, target_lang must be EN"), so a wrong tag is a
+ * failure to follow an explicit rule, not a judgement call. `hasAllRequired` only asked
+ * whether the two fields were non-empty strings, which a model passes by emitting the
+ * exactly-backwards pair.
+ */
+const DIRECTION_TAGS = {
+  ko_to_en: { detected_lang: 'KO', target_lang: 'EN' },
+  en_to_ko: { detected_lang: 'EN', target_lang: 'KO' },
+};
+
+// Case and whitespace are normalised: "ko" and " KO " are the model getting the direction
+// right in a format the extension already handles. Only the language is being checked.
+function tagsMatchDirection(parsed, direction) {
+  const expected = DIRECTION_TAGS[direction];
+  // No forced direction (an `auto` item) means there is nothing to check against, and
+  // reporting a check that was never applicable as a failure would understate every
+  // model. The dataset has no such items today; this is here so adding one cannot
+  // silently drop compliance to 0.
+  if (!expected) return true;
+  return Object.entries(expected).every(([field, value]) =>
+    typeof parsed?.[field] === 'string' && parsed[field].trim().toUpperCase() === value);
+}
+
+/**
  * @param {string} raw     Raw model output, captured even when parsing failed.
  * @param {object|null} parsed  Result of TranslatorAPI parsing, or null if it threw.
  * @param {object} item    Dataset item ({direction, ...}).
@@ -73,6 +100,7 @@ export function checkCompliance(raw, parsed, item, { uiLanguage = 'ko', salvaged
 
     // --- required fields ---
     hasAllRequired: REQUIRED_STRING_FIELDS.every(f => typeof parsed?.[f] === 'string' && parsed[f].length > 0),
+    langTagsMatchDirection: tagsMatchDirection(parsed, item.direction),
     naturalNonEmpty: typeof parsed?.natural === 'string' && parsed.natural.trim().length > 0,
     nuanceNonEmpty: typeof parsed?.nuance === 'string' && parsed.nuance.trim().length > 0,
 
@@ -98,13 +126,13 @@ export function checkCompliance(raw, parsed, item, { uiLanguage = 'ko', salvaged
 // Booleans where true means "the model did the right thing". Everything else is a
 // failure flag and gets inverted when reporting a "compliance rate".
 export const POSITIVE_CHECKS = new Set([
-  'jsonValid', 'hasAllRequired', 'naturalNonEmpty', 'nuanceNonEmpty',
+  'jsonValid', 'hasAllRequired', 'langTagsMatchDirection', 'naturalNonEmpty', 'nuanceNonEmpty',
   'altsPresent', 'altsExactlyTwo', 'altsSizesValid', 'altsRegistersValid',
 ]);
 
 export const ALL_CHECKS = [
   'jsonValid', 'empty', 'fenced', 'prosePreamble',
-  'hasAllRequired', 'naturalNonEmpty', 'nuanceNonEmpty',
+  'hasAllRequired', 'langTagsMatchDirection', 'naturalNonEmpty', 'nuanceNonEmpty',
   'altsPresent', 'altsExactlyTwo', 'altsSizesValid', 'altsRegistersValid',
   'hanjaLeak', 'salvaged', 'retried',
 ];

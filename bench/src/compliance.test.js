@@ -100,3 +100,18 @@ test('a salvaged parse is not counted as jsonValid even though parsed is non-nul
   const c = checkCompliance('{"natural": "truncated', goodParsed, KO_TO_EN, { salvaged: true });
   assert.equal(c.jsonValid, false);
 });
+
+test('language tags must agree with the forced direction, not merely be non-empty', () => {
+  const item = { direction: 'ko_to_en' };
+  const parsed = { detected_lang: 'KO', target_lang: 'EN', natural: 'Hi.', nuance: '설명' };
+  assert.equal(checkCompliance('{}', parsed, item).langTagsMatchDirection, true);
+  // Case and padding are formatting, not a direction error.
+  assert.equal(checkCompliance('{}', { ...parsed, detected_lang: ' ko ' }, item).langTagsMatchDirection, true);
+  // Exactly backwards - and hasAllRequired still passes it, which is why this check exists.
+  const swapped = { ...parsed, detected_lang: 'EN', target_lang: 'KO' };
+  assert.equal(checkCompliance('{}', swapped, item).langTagsMatchDirection, false);
+  assert.equal(checkCompliance('{}', swapped, item).hasAllRequired, true);
+  // A third language is not the requested direction either.
+  assert.equal(checkCompliance('{}', { ...parsed, target_lang: 'JA' }, item).langTagsMatchDirection, false);
+  assert.equal(checkCompliance('{}', null, item).langTagsMatchDirection, false);
+});

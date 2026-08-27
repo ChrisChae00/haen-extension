@@ -230,13 +230,47 @@ The Phase 1–4 review added four requirements for any tuning result:
 4. The manual regression set is a committed/frozen list of 20 IDs with item-level judgments, selected
    before candidate outputs are inspected.
 
-Compliance currently aggregates 14 implemented checks. It does not yet verify that `detected_lang` and
-`target_lang` agree with the requested direction; non-empty wrong tags can pass. Historical scores remain
-valid for the checks they actually measured, but documentation must not call them “15-rule compliance”
-until the direction-aware check exists.
+Compliance aggregated 14 implemented checks until 2026-08-26. It did not verify that `detected_lang` and
+`target_lang` agreed with the requested direction; non-empty wrong tags passed. `langTagsMatchDirection`
+closes that (`scoringVersion` 2), so "15-rule compliance" is now accurate.
+
+*What the 15th check found*: `flores-ke-0007` fails on the product baseline in all three runs with the
+tags exactly reversed - reproducible, and invisible to every other instrument, since COMET scores
+`natural` and never reads the tags. It does not become anyone's worst rule, so no published number moved
+and the `>= 99.53%` tuning regression threshold survives the count change.
+
+*Reporting a check that predates its rows.* Historical runs have no `langTagsMatchDirection` key at all.
+Counting an absent key as `False` would print a brand-new check as 0% for every historical model - a
+measurement that never happened, published as total failure. `compliance_rates()` now takes its
+denominator per key, over the records that actually carry it, and `npm run rescore` re-derives a finished
+run's compliance from its stored raw output when the real number is wanted (no API calls; it touches
+nothing but the `compliance` block).
 
 **Why these two took a second review to close.** They were written into this document by the Phase 1–4
 review and then left as prose. The code around them looked complete — `validateComparableConfigs` reads
 like a full comparability guard, and the pairwise runner counts and reports its failures — so nothing
 prompted a reader to check the rule against the implementation. A documented invariant that no test
 asserts is a comment, not a guard.
+
+---
+
+## 7. A hash that could not see the thing it was hashing (2026-08-26)
+
+`promptHash` is the field the whole comparability story rests on, and it hashed only
+`buildSystemPrompt()`. The tuning track's serving path - Ollama's experimental runner - ignores
+`reasoning_effort` entirely and switches thinking on and off from Qwen3's `/no_think` tag in the
+message. So the single control that changes what the model *does* most on that path was not in the
+hash, and two runs differing by exactly that control were indistinguishable in every recorded field.
+
+**Chosen**: a `promptSuffix` config field, applied to the user message and hashed unconditionally.
+
+**Rejected - hashing it only when set**: it reads as the careful option (don't disturb existing
+hashes) and is the trap. A conditional hash means "no suffix" and "a suffix that happens to be empty"
+take different code paths through the one function that must have none. `hash.update('')` is already
+a no-op, so unconditional hashing costs nothing and every historical `promptHash` is unchanged -
+asserted against the literal `3d18dda71bc9...` in `src/run.test.js`, because if that value ever moves,
+every row of `bench/REPORT.md` becomes incomparable at once.
+
+**Rejected - putting the tag in the system prompt**: the standard Ollama runner is documented to
+ignore `/no_think` in the system position, so the same config would mean "thinking off" on one runner
+and nothing at all on another. The user message works on both.
