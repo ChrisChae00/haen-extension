@@ -303,8 +303,8 @@ claim:
   recorded in `promptHash`; make it an explicit, persisted transport setting
 - ✅ *(closed, see 7.2)* `ALL_CHECKS` contains 14 checks, not 15, and language tags are only checked for
   non-emptiness. Add a direction-aware language-tag check before restoring the 15-check label
-- 🔶 *(list frozen, verdicts pending — see 7.2)* freeze the 20 manual-review IDs and record item-level
-  decisions before looking at candidate results
+- ✅ *(closed, see 7.3)* freeze the 20 manual-review IDs and record item-level decisions before looking at
+  candidate results
 - ✅ *(closed, see 7.1)* immediately before Gemini Batch submission, recompute the actual payload hash and
   compare it with the state file; the completed Phase 4 payload was checked after the fact and did match
 
@@ -430,3 +430,52 @@ rescore path added them to `bench/REPORT.md` as peer model rows and changed the 
 the config carries no field that distinguishes a pipeline check from a measurement.
 
 Tests 61 → 67.
+
+---
+
+### 7.3 The manual gate, reviewed (2026-08-27)
+
+All 20 verdicts recorded while Phase 5 has not run, so no tuned output exists that could have shaped
+them. **Baseline result: 12 pass, 8 fail** — 7 meaning distortions and 1 Hanja leak.
+
+| id | why it fails |
+|---|---|
+| `hbx-idc-014` | `걔는 귀가 얇아` → "She has thin ears." The idiom means *easily swayed*; it was rendered as ear thickness, and `nuance`/`tip` then recommend "delicate" or "small" as better ear adjectives. The model never noticed there was an idiom |
+| `hbx-idc-013` | `손이 미끄러졌어` → "I slipped." The subject moved from the hand to the speaker: dropping something became falling over. All five alternatives repeat it |
+| `hbx-idc-003` | "Break a leg!" → `잘 가라!` — a goodbye, not encouragement. `nuance` explains the idiom correctly and an alternative even carries `행운을 빌어`, so the one field the user reads is the only one that is wrong |
+| `hbx-idc-002` | "You can say that again." → `그 말 다시 해줘도 괜찮아` — permission to repeat, where the idiom is emphatic agreement. `nuance` repeats the misreading |
+| `hbx-idc-001` | "butterflies in my stomach" → `마음이 허물어지는 것 같아요` — a heart *collapsing*, not fluttering. `literal` and `nuance` are both right; `natural` is not |
+| `hbx-idc-005` | Hanja leak inside `natural`: `그 이름은 좀耳에 익은 것 같아`. Meaning correct, alternatives clean. The same item `hanjaLeak` already flags at run time |
+| `hbx-idb-014` | `양해 부탁드립니다` → casual alternatives "Get it?" / "You know what I mean?", which ask whether the listener understood rather than asking them to bear with the speaker |
+| `hbx-idb-012` | `잘 부탁드립니다` → casual alternatives "You've got this." / "You're on it.", encouragement where the source is a request |
+
+Two things this exposes that no automated check in the harness sees:
+
+- **The failure is concentrated in `natural`, and the other fields often know better.** On three of the
+  five idiom-casual failures the `nuance` or `literal` field states the idiom's real meaning while
+  `natural` renders it literally. That is not a knowledge gap, it is a field-level breakdown — and it is
+  encouraging for distillation, because the information is already in the model
+- **`alternatives` is where the business-register failures live.** Both `idiom-business` failures have a
+  correct `natural` and a wrong casual alternative. Compliance counts alternatives (`altsExactlyTwo`,
+  `altsSizesValid`, `altsRegistersValid`) and never reads them; the LLM judge's `altsDistinct` asks
+  whether they differ from each other, not whether they mean what the source means. This gate is the
+  only instrument in the project that looks
+
+**12/20 = 60% is consistent with the judge's 70% `naturalFluent` on the full 40** — same order, slightly
+stricter, which is what a hand review of a smaller sample should look like. Two independent instruments
+landing in the same place is weak evidence that neither is wildly miscalibrated.
+
+**Scope, written down before it can be tuned to**: the gate reads `natural`, `literal`, and the
+alternatives' expressions. A weak `nuance` or `tip` is not a failure here — those have their own judge
+criteria — but a `nuance` that repeats an error in `natural` is cited as evidence the error is
+systematic. The tuned candidate gets judged under exactly this scope, and fails if it distorts meaning
+or leaks Hanja on any item the baseline passed. Fixing a baseline failure is **not** evidence of
+success; that is the pairwise sign test's job.
+
+**Provenance caveat, recorded in the file itself.** This gate exists as the check that is *not* an LLM
+judge, and it was filled in by an LLM (Claude, at the owner's instruction) — the same vendor as the
+`claude-sonnet-5` absolute and pairwise judge, so the verdicts are not independent of it and plausibly
+share its blind spots. They are best read as a **pre-registered written standard** rather than as a human
+control. A person should re-read at least the eight failures before any tuning claim leans on this file.
+`src/manualRegression.test.js` now fails if a verdict returns to `null`, if a verdict disagrees with its
+own two reasons, or if a failure carries no written reason.

@@ -29,7 +29,7 @@ compliance, latency, cost, and LLM judgement.
 | Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
 | Paid judge verdicts (2026-08-22 snapshot) | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
 | Total paid measurement cost (2026-08-22 snapshot) | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
-| Harness tests (2026-08-26) | 67 passing (zero dependencies) |
+| Harness tests (2026-08-27) | 68 passing (zero dependencies) |
 
 ---
 
@@ -112,7 +112,21 @@ with no way to tell which had thinking folded in. Re-scored all eight runs again
 `total_tokens` was never persisted for them, so re-running is the only way to close the gap and it
 was judged not worth it for 4%.
 
-### 6. Cost optimisation — 80% more free-tier budget
+### 6. A hand review that found what four automated instruments could not
+
+Twenty frozen idiom items, read against the product baseline's own output before any tuned model
+existed. **12 pass, 8 fail.** COMET scores `natural` against a reference and cannot see an idiom
+rendered literally; compliance counts the alternatives and never reads them; the LLM judge asks whether
+the alternatives differ from each other, not whether they mean what the source means. So `걔는 귀가
+얇아` → "She has thin ears" passes every automated check in the project.
+
+The pattern is the useful part: on three of the five casual-idiom failures the model's own `nuance` or
+`literal` field states the idiom's real meaning while `natural` renders it word-for-word — the
+knowledge is present and only the output field is wrong — and both business-register failures have a
+correct `natural` with a casual alternative that reverses the speech act. 12/20 also lands close to the
+judge's independently measured 70% `naturalFluent` on the full 40.
+
+### 7. Cost optimisation — 80% more free-tier budget
 
 Measured and confirmed that Groq deducts against the request's `max_tokens` reservation, not actual
 usage. Using the completion-token distribution across all models (p99 499, max 581) as evidence,
@@ -147,6 +161,8 @@ broker routing rather than model behaviour.
   seven pre-evaluation blockers were closed in code on 2026-08-26 — comparability, complete-sample and
   payload-hash ([§7.1](ENGINEERING-LOG.md#71-the-blockers-that-were-code-fixed-2026-08-26)), then
   `/no_think` provenance in `promptHash`, the direction-aware language-tag check, and the frozen 20-ID
-  manual list ([§7.2](ENGINEERING-LOG.md#72-three-more-blockers-closed-2026-08-26)). Still open: the
-  **item-level verdicts** for those 20 ids, which must be recorded before any tuned output exists, and
-  the **same-serving untuned control run**, which needs the `/no_think` setting it now has.
+  manual list ([§7.2](ENGINEERING-LOG.md#72-three-more-blockers-closed-2026-08-26)). The 20 item-level
+  verdicts were recorded on 2026-08-27, before any tuned output exists
+  ([§7.3](ENGINEERING-LOG.md#73-the-manual-gate-reviewed-2026-08-27)): the baseline scores **12 pass /
+  8 fail**, and the file carries the caveat that an LLM filled a gate meant to be the non-LLM check.
+  Still open: the **same-serving untuned control run**, which needed the `/no_think` setting it now has.
