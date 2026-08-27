@@ -530,13 +530,44 @@ stamps it after re-deriving, and judge verdicts keep their own `rubricHash`. `SC
 in `compliance.js` with a changelog, `run.js` imports it instead of repeating a literal, and
 `test_score.py` fails if the Python copy drifts from the JavaScript one.
 
-**One thing this closes is also one thing it opens.** The gate now rejects
+**One thing this closes is also one thing it opens — and it is now decided.** The gate rejects
 control-vs-product-baseline: `promptHash` and `reasoningEffort` both differ, correctly, because they
-*are* different transports. That is the right answer and it invalidates the shape of the plan's first
-comparison — tuned vs `qwen3:14b` cannot be run through the pairwise sign test as a controlled A/B,
-because it is not one. It is a product comparison between two different products. The LoRA-attribution
-comparison (tuned vs this control) does pass the gate, since both sides share the serving path.
-Deciding how to report the product comparison is now the open item; the measurement is fine, the
-statistic was never applicable.
+*are* different transports. That invalidates the shape of the plan's first comparison — tuned vs
+`qwen3:14b` is not a controlled A/B, so a sign test on it would report a p-value that folds the
+serving stack into the model. The control had already put a number on how large that confound is:
+31 of 40 outputs differ with identical weights.
+
+**Decision (2026-08-27): significance is claimed only for tuned vs untuned control.** The product
+comparison is reported as descriptive statistics — win/loss/tie counts and the absolute table, no
+p-value computed and none quoted — and labelled as what it is, a comparison between two products
+whose serving paths differ. The gate's rejection is not to be worked around; refusing to compute the
+statistic is the decision, not an obstacle to it. `FINETUNING.md` §2 and §6 now carry this, including
+a check that pairwise's `--baseline-run-dir` points at the control.
+
+**The absolute judge on the control ($0.38, 40 items, `claude-sonnet-5` fixed) made the confound
+worse than the output diff suggested.**
+
+| criterion | product baseline | untuned control | items flipped (of 40) |
+|---|---|---|---|
+| `naturalFluent` | 70.0% | 72.5% | 9 (5 up, 4 down) |
+| `nuanceGrounded` | 30.0% | 27.5% | 13 |
+| `altsDistinct` | 52.5% | 47.5% | 16 |
+| `tipFactual` | 70.0% | **50.0%** | **20** |
+
+Two things follow, and both change the plan.
+
+**The net rate hides the churn.** `naturalFluent` moved 2.5 points, which reads as "basically the
+same model" — and it is the same model — while nine individual items changed verdict. A tuned
+candidate reporting a few points of net gain on an absolute criterion would be indistinguishable from
+this. It is the reason the primary success criterion is an item-paired sign test rather than a
+difference of rates, and that choice now has a number behind it instead of an argument.
+
+**The regression thresholds were anchored to the wrong model.** `FINETUNING.md` §2 froze
+`altsDistinct ≥ 52.5%` and `tipFactual ≥ 70.0%` from the product baseline. The control already sits
+at 47.5% and 50.0% — so a tuned model that changed nothing would fail two regression gates for a
+serving difference that predates it. Thresholds re-anchored to the control, with the baseline values
+kept in parentheses. Two items are left open rather than guessed: COMET's CI floor is a 212-item
+number and the control was only run on the 40 idiom items, and the frozen manual-20 verdicts were
+recorded against baseline outputs that differ from the control's on 31 of 40 items.
 
 Tests 68 → 69.

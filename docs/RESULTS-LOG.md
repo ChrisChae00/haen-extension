@@ -27,8 +27,8 @@ compliance, latency, cost, and LLM judgement.
 | Dataset | 212 items (FLORES-200 devtest 200 + 12 hand-written) + 40 judge-only idiom items, both directions |
 | Total API calls (2026-08-22 measurement snapshot) | 3,200+ (212 × 2–3 runs per model) |
 | Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
-| Paid judge verdicts (2026-08-22 snapshot) | 316 (`claude-sonnet-5`, fixed, $0.0095 each) |
-| Total paid measurement cost (2026-08-22 snapshot) | ~$7.9 (OpenRouter $6.3 + Google AI Studio $1.6) |
+| Paid judge verdicts | 356 (`claude-sonnet-5`, fixed, $0.0095 each) — 316 at the 2026-08-22 snapshot, +40 for the untuned control on 2026-08-27 |
+| Total paid measurement cost | ~$8.3 (OpenRouter $6.7 + Google AI Studio $1.6); $7.9 at the 2026-08-22 snapshot, +$0.38 for the control's judge run |
 | Harness tests (2026-08-27) | 69 passing (zero dependencies) |
 
 ---
@@ -139,10 +139,22 @@ scores 100% on all 15 compliance checks where the baseline leaks Hanja on one it
 (p50 9,089 ms vs 10,931 ms). Every one of those differences would otherwise have been attributed to
 fine-tuning.
 
+The judge made it sharper still. Scored by the same fixed `claude-sonnet-5` rubric, `tipFactual` falls
+70.0% → 50.0% and **20 of 40 items flip verdict** — with identical weights. Even `naturalFluent`,
+which barely moves in aggregate (70.0% → 72.5%), flips nine items. **A net rate hides the churn
+underneath it**, which is why the success criterion is an item-paired sign test and not a difference
+of percentages. It also meant two of the pre-registered regression thresholds were anchored to the
+wrong model: a tuned candidate that changed nothing would have failed them.
+
 The same run exposed a compliance check that measured the transport instead of the model: `/no_think`
 emits an empty `<think></think>`, the body stopped starting with `{`, and `prosePreamble` read 0/40.
 Since the summary column reports the worst rule, the tuning track was one run away from publishing
 itself at 0% compliance for a reason that had nothing to do with any model.
+
+And it settled a methodology question by **refusing to compute a statistic**: the tuned-vs-product
+comparison does not share a transport, so it is reported as descriptive win/loss/tie counts with no
+p-value, and significance is claimed only against the control. The alternative — an override flag on
+the comparability gate — would have turned a guard into a suggestion.
 
 ### 8. Cost optimisation — 80% more free-tier budget
 
