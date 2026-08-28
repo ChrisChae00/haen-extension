@@ -634,3 +634,56 @@ Keeping the full holdout instead of sampling it (rejected in 7.5, because
 `iterate_batches` permutes validation batches too) is what makes this readable at all.
 The differences that carried the decisions here are 0.008 and 0.002; a different random
 25 items per evaluation would have buried both in noise.
+
+### 7.7 The fuse destroyed what the training learned (2026-08-27)
+
+The tuned candidate was fused, imported, and measured on the 40-item idiom set. It failed a
+hard regression gate immediately: `altsExactlyTwo` fell from 100% to **22.5%** — 9 of 40
+outputs carried the required two alternative categories, 25 carried one, and 6 carried none.
+Latency p50 halved, 9,153 ms to 5,017 ms, which looked like a win and was a symptom: fewer
+alternatives is less text.
+
+Every cheap explanation was eliminated before an expensive one was entertained, and all of
+these cost nothing:
+
+| Checked | Result | Ruled out |
+|---|---|---|
+| teacher data's alternative counts | **996 of 996 have exactly two** | bad training data |
+| training log truncation warnings | none | `max_seq_length` clipping targets |
+| generation with and without `/no_think` | one alternative either way | train/inference prompt mismatch |
+| `mask_prompt` offset logic | masks exactly up to the assistant turn | the one non-default setting |
+| **MLX with the adapter**, checkpoints 224 / 896 / 1792 | **two alternatives, all three** | **the training itself** |
+| **MLX with the fused checkpoint** | **[1, 2, 1]** | Ollama, and the chat template |
+
+The adapter applied at inference obeys the rule. The same weights fused into the checkpoint
+do not, and they fail the same way inside MLX as inside Ollama — so the defect is the fuse,
+not the importer and not the serving template.
+
+**The mechanism was already measured, two steps earlier, and not recognised.** `fuse()`
+dequantises the int4 weight, adds the LoRA delta, and re-quantises. Verifying the fused
+candidate gave a mean absolute weight delta of **2.81e-4** against the untuned control. The
+control's own measured re-quantisation noise against the base checkpoint is **2.6e-4**. The
+signal is the size of the rounding error, so re-quantising does not carry the learned delta
+through — it rounds most of it away and adds a perturbation of its own at the same scale.
+What comes out is neither the base model nor the tuned one.
+
+That number was recorded when the candidate was fused, described as "thin", and correctly
+flagged as a weak predictor of behaviour — weight-space distance usually is. The error was
+treating it as a fact about how much the tuning would *matter* rather than as a fact about
+whether the tuning would *survive the pipeline*. Those are different questions and only the
+second one is answerable from weight magnitudes.
+
+**This also breaks the untuned control's premise, which is the more expensive lesson.** The
+control was built so the fuse round trip's perturbation would appear on both sides and cancel.
+That argument holds only if the perturbation is additive and independent of the delta. Here it
+is neither: it is the same size as the delta and it acts *on* the delta. The control still
+cancels the noise, but after fusing there is no signal left for it to be compared against.
+
+A control proves that two arms took the same path. It cannot prove the path preserved the
+thing being measured. Nothing in this project's design would have caught this — the invariant
+that went unstated is that **the serving pipeline must have a resolution finer than the effect
+being served**, and it was never checked because it had never been articulated.
+
+Nothing was spent. The paid judge was queued behind this measurement and did not run: judging
+here would have scored a model the fuse had already corrupted, and reported it as the result
+of fine-tuning.

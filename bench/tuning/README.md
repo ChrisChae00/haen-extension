@@ -77,8 +77,10 @@ instead of being attributed to LoRA.
 ```
 
 Outputs land in `adapters-run1/` (gitignored): `adapters.safetensors` plus a numbered
-checkpoint every `save_every` iters. Serve one exactly like the control — same fuse, same
-affine injection, same `ollama show` check — pointing `--adapter-path` at this directory.
+checkpoint every `save_every` iters.
+
+**Do not fuse a rank-8 adapter into the int4 checkpoint and expect it to survive** — see
+below. Serve the adapter unfused instead.
 
 Run 1 measured: 6h08m for 1,792 iters, peak 15.617 GB of 24 GB, holdout loss 1.566 -> 0.859.
 
@@ -97,3 +99,36 @@ scores a different random subset at every evaluation and the losses are not comp
 evaluations - the one thing the holdout is for. Full holdout costs 645-705s here; take fewer
 points instead of fewer items. Run 1's decisions turned on differences of 0.008 and 0.002,
 which a resampled subset would have buried.
+
+## Fusing a *trained* adapter loses it (2026-08-27)
+
+The zero adapter fuses correctly because zero survives any rounding. A trained one may not.
+
+Run 1's adapter, fused and served, failed a compliance rule 78% of the time
+(`altsExactlyTwo` 100% -> 22.5%) while the same checkpoints served with `--adapter-path`
+obeyed it. It fails identically in MLX and in Ollama, so the fuse is the defect, not the
+importer or the template.
+
+The reason is in the numbers this directory's own script prints. Against the control:
+
+```
+verify_zero_fuse.py --base fused-untuned-control --fused fused-run1
+  worst max |diff| 0.0878906   mean |diff| 0.00028122
+```
+
+and the control's own re-quantisation noise against the base is mean 0.00026. **The learned
+delta is the size of the int4 grid's rounding error.** `fuse()` dequantises, adds the delta,
+and re-quantises, so a delta that small is rounded away rather than carried through.
+
+This also voids the untuned control for a fused comparison. The control cancels the round
+trip's perturbation, which is correct and still true — but cancellation assumes the
+perturbation is additive and independent of the delta. Re-quantisation is neither: it acts on
+the summed weight. Both arms take the same path, the noise cancels, and nothing is left
+between them.
+
+**Check before trusting any fused candidate:** run `verify_zero_fuse.py` with `--base` set to
+the fused control and `--fused` set to the candidate. If the mean |diff| is not comfortably
+above the control's own noise floor, the fuse did not carry the training and no downstream
+measurement means anything. Serve the adapter unfused, or fuse at a precision that can hold
+the delta — and if you do the latter, the candidate is no longer comparable to a Q4_K_M
+product baseline.
