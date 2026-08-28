@@ -13,9 +13,9 @@ plus a pricing row.
 |---|---|
 | `name` | Short slug. Becomes part of the run id (`20260806-1432-<name>`). |
 | `harness` | Which provider factory drives it. Only `haen` exists — it covers every OpenAI-compatible backend. |
-| `provider` | `groq` \| `openrouter` \| `google` \| `ollama`. Selects the endpoint in `src/apiClient.js`. Passed explicitly so it never falls back to API-key-prefix sniffing. |
+| `provider` | `groq` \| `openrouter` \| `google` \| `ollama` \| `mlx`. Selects the endpoint in `src/apiClient.js`. Passed explicitly so it never falls back to API-key-prefix sniffing. `mlx` is `mlx_lm.server` on port 8080, used to serve a LoRA adapter unfused. |
 | `modelId` | **Exact** model id. Never an evergreen alias. |
-| `apiKeyEnv` | Env var holding the key. Omit or `null` for `ollama` — local models have no key. |
+| `apiKeyEnv` | Env var holding the key. Omit or `null` for `ollama` and `mlx` — local models have no key. |
 | `temperature` | `0` for benchmark runs. Does not guarantee determinism; that is what `runs: 3` measures. |
 | `jsonMode` | `true` unless the model can't do OpenAI's `response_format: json_object` (check the provider's docs). Compliance's `jsonValid` is only a fact about the model's own instruction-following when this is set correctly - a server-enforced JSON mode measures the serving stack, not the model. |
 | `maxTokens` | Per-request `max_tokens`. Leave `null` to keep the extension's 2048. Groq reserves TPD/TPM against this number rather than actual usage, so lowering it to ~768 (observed completion p99 is ~400) roughly doubles how many calls a free-tier key affords. Set it too low and responses get truncated, which compliance then scores as the model's fault. |

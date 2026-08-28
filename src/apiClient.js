@@ -12,6 +12,12 @@ const ENDPOINTS = {
   // harness can drive local models through this exact code path — same retry,
   // error mapping, and parsing as the hosted providers.
   ollama:     'http://localhost:11434/v1/chat/completions',
+  // MLX-LM's OpenAI-compatible server, same benchmark-only role as `ollama` above.
+  // It exists because a LoRA adapter cannot be fused into an int4 checkpoint without
+  // losing it (bench/tuning/README.md): the learned delta is the size of the grid's
+  // rounding error. mlx_lm.server applies the adapter at inference instead, so the
+  // tuned-vs-untuned comparison runs on weights that still carry the training.
+  mlx:        'http://localhost:8080/v1/chat/completions',
 };
 
 const MODEL_IDS = {

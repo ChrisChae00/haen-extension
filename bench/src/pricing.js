@@ -37,7 +37,7 @@ export const PRICING = {
 // Local models cost nothing per token. Electricity and wall-clock time are real,
 // but latency is already measured separately and dollars-per-token is what the
 // cost column means.
-export const LOCAL_PROVIDERS = new Set(['ollama']);
+export const LOCAL_PROVIDERS = new Set(['ollama', 'mlx']);
 
 export function priceFor(modelId, provider) {
   if (LOCAL_PROVIDERS.has(provider)) {

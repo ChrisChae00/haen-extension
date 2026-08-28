@@ -434,3 +434,43 @@ same path. It cannot prove the path preserved the thing being measured. Before t
 measure the pipeline's resolution against the size of the effect — and if the effect is
 smaller, no control rescues the comparison, because both arms are being rounded to the same
 place.
+
+## 12. Verifying intent instead of effect (2026-08-28)
+
+Serving the LoRA adapter unfused needed two arms that differ only in whether the adapter is
+loaded. Because `mlx_lm.server` names the model by its base path, both arms report the same
+`modelId`, and nothing in a run's recorded config distinguishes them — the only difference is
+which server process was running. That is a labelling hazard, so `run_mlx_arms.sh` was written
+to start each server itself and assert the live command line matched the config.
+
+It asserted successfully, and the arms came out byte-identical in all four scored fields
+across 40 items. `mlx_lm.server` 0.31.3 accepts `--adapter-path` and never applies it: the
+adapter is registered under the key `"default_model"` (server.py:316) while the lookup uses
+the already-resolved model path (server.py:389). The command line was exactly as asserted. The
+assertion was true and the measurement was still of the wrong thing.
+
+**Checking that a process was invoked correctly is not checking that it is doing the right
+thing.** Every silent failure in this project has had this shape — Ollama importing a
+quantised checkpoint as 1.8B bfloat16 and reporting success, `mlx_lm`'s `iters` counting
+micro-batches, the leakage guard reading a file the trainer never opens (§10). In each case
+the stated invariant was true and the thing it stood for was false.
+
+The replacement is behavioural. `bench/tuning/mlx_server_adapter.py --verify-adapter`
+generates one completion with the adapter and one without, and refuses to start the server
+unless they differ; `run_mlx_arms.sh` refuses to benchmark unless that verification appears in
+the server log. The check is cheap, it runs on every arm, and it fails closed.
+
+**What made the bad run detectable is worth keeping separately from the fix.** Two arms that
+agree *exactly* are evidence of a broken harness, not a null result. Different weights do not
+produce byte-identical text on 40 items; a genuine no-effect adapter would still perturb
+sampling somewhere. When a comparison returns a suspiciously clean zero, the first hypothesis
+should be that the comparison is not being made — and the diff that was written to spot small
+effects is what surfaced it, because it counted differing items rather than averaging a score.
+
+Alongside this, a claim from §11 is withdrawn. That entry cited `nuance` switching from
+English to Korean as evidence the adapter was active, inferred from one probe. Counted across
+all four runs the split is 20/20 in every one: the field's language follows translation
+direction, not tuning. §11's conclusion stands on the compliance collapse, which is unrelated,
+but the supporting observation was wrong. A single-item observation is an anecdote even when
+the surrounding argument is sound, and it does not become evidence by sitting next to real
+evidence.
