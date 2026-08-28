@@ -27,8 +27,8 @@ compliance, latency, cost, and LLM judgement.
 | Dataset | 212 items (FLORES-200 devtest 200 + 12 hand-written) + 40 judge-only idiom items, both directions |
 | Total API calls (2026-08-22 measurement snapshot) | 3,200+ (212 × 2–3 runs per model) |
 | Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
-| Paid judge verdicts | 356 (`claude-sonnet-5`, fixed, $0.0095 each) — 316 at the 2026-08-22 snapshot, +40 for the untuned control on 2026-08-27 |
-| Total paid measurement cost | ~$8.3 (OpenRouter $6.7 + Google AI Studio $1.6); $7.9 at the 2026-08-22 snapshot, +$0.38 for the control's judge run |
+| Paid judge verdicts | 476 (`claude-sonnet-5`, fixed) — 316 at the 2026-08-22 snapshot, +40 untuned control 2026-08-27, +82 absolute and +38 pairwise on the two unfused arms 2026-08-28 |
+| Total paid measurement cost | ~$11.5 (OpenRouter $9.90 + Google AI Studio $1.6) as of 2026-08-28; $7.9 at the 2026-08-22 snapshot. The OpenRouter grant is exhausted, which stopped the pairwise sign test at 17 of 40 items |
 | Fine-tuning run (2026-08-27) | QLoRA rank 8 / top 8 layers on Qwen3-14B-4bit, 896 distilled samples, 224 updates, 6h08m local, peak 15.6 GB of 24 GB; holdout loss 1.566 → 0.859 |
 | Harness tests (2026-08-27) | 70 passing (zero dependencies) |
 
@@ -198,9 +198,24 @@ broker routing rather than model behaviour.
   (mean 2.81e-4) is the size of the int4 re-quantisation's own rounding error (2.6e-4), so
   re-quantising rounds the learned change away instead of carrying it through
   ([§7.7](ENGINEERING-LOG.md#77-the-fuse-destroyed-what-the-training-learned-2026-08-27)).
-  The paid judge was queued behind this measurement and did not run — judging here would have
-  scored a model the fuse had corrupted and reported it as a fine-tuning result. Measurement
-  continues on an unfused serving path.
+  The paid judge was held back from that run — judging there would have scored a model the fuse
+  had corrupted and reported it as a fine-tuning result.
+- **The unfused comparison ran, and the target criteria did not improve.** Both arms were
+  re-served through `mlx_lm.server`, which turned out to accept `--adapter-path` and ignore it
+  — caught because the two arms came back byte-identical in all four scored fields across 40
+  items ([§7.8](ENGINEERING-LOG.md#78-a-flag-that-was-accepted-and-ignored-caught-by-two-arms-that-agreed-too-well-2026-08-28)).
+  With that fixed and verified behaviourally, the absolute judge on n=40 gives `naturalFluent`
+  75.0% → 70.0%, `nuanceGrounded` 27.5% → 30.0%, `altsDistinct` 50.0% → 55.0%, `tipFactual`
+  62.5% → 50.0%. The two criteria this track exists to improve did not improve. Compliance
+  regressed by one item (`altsExactlyTwo` 100% → 97.5%, a malformed JSON object).
+- **The primary criterion has not run.** The item-paired pairwise sign test needs both A/B
+  orders on all 40 items and stopped at 17 when the OpenRouter grant ran out; the completeness
+  gate refused to emit a p-value on a partial subset, and the partial counts are not quoted
+  because the finished items are the first by dataset order, not a random sample. Resuming
+  costs about $0.44. Until it runs there is no verdict — the absolute rates are the secondary
+  criterion precisely because they hide the item-level churn (10–15 items flip on every
+  criterion here), and reading a verdict off them would be the substitution the sign test
+  exists to prevent.
 - **The untuned control exists and is measured** (2026-08-27), which closed the last of the
   seven pre-evaluation blockers. It immediately earned its cost: with weights mathematically
   identical to the product baseline, 31 of 40 `natural` outputs differ, and the absolute

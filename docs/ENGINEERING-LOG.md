@@ -687,3 +687,103 @@ being served**, and it was never checked because it had never been articulated.
 Nothing was spent. The paid judge was queued behind this measurement and did not run: judging
 here would have scored a model the fuse had already corrupted, and reported it as the result
 of fine-tuning.
+
+### 7.8 A flag that was accepted and ignored, caught by two arms that agreed too well (2026-08-28)
+
+With fusing ruled out (§7.7), both arms were re-run through `mlx_lm.server`, the control as
+the base model and the candidate as the base plus `--adapter-path`. A shell script started
+each server, asserted the live command line carried the adapter the config named, and ran the
+benchmark. Both arms completed cleanly, 40 items each, no failures.
+
+Then the comparison: `natural` differed on 0 of 40 items. So did `literal`, `nuance`, and
+`tip`. **The two arms were byte-identical in every scored field.**
+
+A LoRA adapter that changes nothing is a possible result. It was not this one — loading the
+same adapter through `mlx_lm.load(adapter_path=...)` and generating produced visibly different
+output from the base on the same prompt. So the adapter works and the server was not applying
+it.
+
+The cause is two lines of `mlx_lm/server.py` (0.31.3, the newest release):
+
+```python
+self._adapter_map["default_model"] = self.cli_args.adapter_path   # 316
+...
+model_path   = self._model_map.get(model_path, model_path)        # 388  "default_model" -> real path
+adapter_path = self._adapter_map.get(model_path, adapter_path)    # 389  looks up the REAL path
+```
+
+The adapter is registered under the literal key `"default_model"`, but the lookup happens
+*after* that name has been resolved to the model path, so it never hits. Requesting the model
+by id misses; requesting `"default_model"` also misses, because by line 389 the name has
+already been rewritten. Verified both ways: both return base-model output.
+
+**The guard that should have caught this checked intent, not effect.** It confirmed the
+process was started with `--adapter-path tuning/adapters-run1` — which was completely true and
+completely irrelevant, because the flag was accepted and discarded. This is the identical
+failure shape to Ollama importing a quantised checkpoint as 1.8B bfloat16 without erroring
+(`bench/tuning/README.md`), and to `mlx_lm`'s `iters` counting something other than what the
+plan assumed (§7.5). Three times now in this track, an option has been accepted and silently
+not honoured.
+
+The fix that generalises is not "read more source". It is that **a serving arm has to prove
+itself by behaviour before it is allowed to produce numbers.** `bench/tuning/mlx_server_adapter.py`
+now registers the adapter under the resolved path too, and `--verify-adapter` generates once
+with and once without the adapter and refuses to start the server unless the outputs differ.
+`run_mlx_arms.sh` requires that verification line in the log before it will run the benchmark.
+
+What made this catchable was cheap and worth stating on its own: **two arms that agree exactly
+are evidence of a broken harness, not a null result.** Real models given different weights do
+not produce byte-identical text on 40 items. The comparison that was supposed to measure the
+tuning measured the plumbing instead, and said so loudly enough to notice.
+
+**A correction to §7.7.** That entry cited `nuance` appearing in Korean rather than English as
+a sign the adapter was taking effect. That was inferred from a single probe. Counting all four
+runs, every one is 20 Korean / 20 English — the field's language tracks translation direction,
+not tuning. The observation was wrong and is withdrawn; §7.7's conclusion is unaffected, since
+it rests on `altsExactlyTwo` collapsing to 22.5% under fusing while every checkpoint served
+with the adapter holds at 100%.
+
+### 7.9 The first honest tuned-vs-control numbers, and why there is still no verdict (2026-08-28)
+
+With both arms served through the verified path (§7.8), the candidate and the untuned control
+differ where they should: `natural` on 30 of 40 items, `literal` on 12, `nuance` and `tip` on
+all 40. Both ran 40 items with zero failures.
+
+Absolute judge, fixed `anthropic/claude-sonnet-5`, identical serving conditions, n=40:
+
+| criterion | control | tuned | delta | flipped | tuned better | control better |
+|---|---|---|---|---|---|---|
+| `naturalFluent` | 75.0% | 70.0% | −5.0pp | 10 | 4 | 6 |
+| `nuanceGrounded` | 27.5% | 30.0% | +2.5pp | 11 | 6 | 5 |
+| `altsDistinct` | 50.0% | 55.0% | +5.0pp | 10 | 6 | 4 |
+| `tipFactual` | 62.5% | 50.0% | −12.5pp | 15 | 5 | 10 |
+
+**The two criteria this track exists to improve — `natural` and `nuance` — did not improve.**
+`naturalFluent` fell 5pp and `nuanceGrounded` rose 2.5pp, one item either side of noise on a
+40-item sample. `tipFactual` fell 12.5pp, the largest single move and the wrong direction.
+
+The flip counts matter more than the rates, for the reason recorded in §7.4: 10 to 15 items
+change verdict under every criterion, so a 1-item net delta is a net of five or six changes in
+each direction, not five or six items quietly improving.
+
+**Compliance regressed by exactly one item.** `altsExactlyTwo` 100% → 97.5%. The cause is a
+structural JSON defect in `hbx-idc-001`: the model closed the root object after the first
+alternative (`...]}]}`) and then continued with a second one, so the parser salvaged the
+scalar fields and recovered no alternatives. One malformed object in 40 is a different
+animal from fusing's 78% collapse, but the regression threshold is "worst check ≥ 100%", and
+97.5% does not meet it.
+
+**The primary criterion did not complete.** The item-paired pairwise sign test needs both A/B
+orders on all 40 items; OpenRouter credits ran out at 17 complete, and the completeness gate
+added in §7.1 refused to print a p-value on the partial subset — correctly, and the partial
+counts are not reported here either, since the 17 that finished are the first by dataset
+order rather than a random sample. Resuming needs about $0.44 of credit; the judge caches, so
+a re-run continues rather than restarts.
+
+**What can be said, and what cannot.** The tuning ran, the adapter demonstrably changes the
+model's output, and on 40 items judged absolutely it did not improve the two target criteria.
+That is a real negative signal but not the verdict: the sign test is the primary criterion
+precisely because absolute rates hide item-level churn, and it has not run. No success is
+claimed. No failure is declared either, and the difference is not a hedge — declaring failure
+on the criterion that was explicitly designated secondary, because the primary one was
+unaffordable, would be the same substitution the sign test exists to prevent.

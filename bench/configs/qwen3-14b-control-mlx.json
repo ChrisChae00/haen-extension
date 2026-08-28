@@ -1,0 +1,24 @@
+{
+  "name": "qwen3-14b-control-mlx",
+  "harness": "haen",
+  "provider": "mlx",
+  "modelId": "mlx-community/Qwen3-14B-4bit",
+  "apiKeyEnv": null,
+  "uiLanguage": "ko",
+  "temperature": 0,
+  "jsonMode": true,
+  "stream": true,
+  "reasoningEffort": null,
+  "promptSuffix": " /no_think",
+  "datasetVersion": "v1",
+  "datasets": [
+    "handbuilt-ext.jsonl"
+  ],
+  "limit": null,
+  "runs": 1,
+  "concurrency": 1,
+  "judgeModelId": "anthropic/claude-sonnet-5",
+  "judgeProvider": "openrouter",
+  "judgeApiKeyEnv": "OPENROUTER_API_KEY",
+  "adapterPath": null
+}
