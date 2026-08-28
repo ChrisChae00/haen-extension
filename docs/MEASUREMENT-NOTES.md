@@ -387,3 +387,50 @@ review of added data stays required, and the test says so.
 The general shape, which this project keeps rediscovering: a guard is only as good as the
 artifact it points at. This one had the right rule, the right assertion, and the wrong path,
 and pointed at the wrong path for as long as no data arrived by the route it could not see.
+
+## 11. A control that cancels the noise but not into a signal (2026-08-27)
+
+The untuned control (§6, and `bench/tuning/README.md`) exists because the tuned candidate is
+not the product baseline plus new weights: it is served through a different runner, a
+different quantisation, and a different template. The control takes that entire path with a
+zero-initialised adapter, so `fuse()` computes `weight + 0` and any perturbation the round
+trip introduces appears on both arms and cancels.
+
+The measurement that justified it is still correct. Fusing re-quantises the 56 LoRA-targeted
+layers even when the delta is zero, moving weights by a mean of 2.6e-4 — small, not zero, and
+paid identically by both arms.
+
+What was never asked is how that number compares to the delta it is supposed to be carrying.
+Fusing the tuned adapter and measuring against the control gives a mean absolute delta of
+**2.81e-4**. The signal and the round trip's own noise are the same size.
+
+The cancellation argument assumes the perturbation is additive and independent of what is
+being measured. Re-quantisation is neither. It acts on the summed weight, so a delta smaller
+than the int4 grid step is not carried through with noise added — it is rounded away. Both
+arms still take the same path and the noise still cancels; there is simply nothing left
+between them. Serving the adapter unfused produces correct outputs at every checkpoint; the
+fused version of the same weights fails a compliance rule 78% of the time.
+
+**Two alternatives were considered and are not fixes for this measurement.**
+
+Fusing at 8-bit or bf16 would preserve the delta, and was rejected as the primary path: the
+product baseline is served at Q4_K_M, so changing the candidate's quantisation trades a broken
+causal comparison for a broken product comparison. It stays available as a deliberate,
+separately-reported experiment.
+
+Raising rank or learning rate until the delta clears the quantisation grid would also work,
+and is the wrong instrument. It changes the training to suit the serving pipeline's
+resolution, which means the pipeline — not the question — is choosing the hyperparameters.
+
+The path taken instead is to serve both arms through `mlx_lm.server`, base alone as the
+control and base-plus-adapter as the candidate, with no fuse on either side. That answers the
+causal question ("did LoRA change behaviour") on weights that still carry the change. It
+cannot answer the latency question against the shipped model, because it is a different
+serving stack — so latency against the product is not claimed from it, and is reported only
+from a path the product could actually use.
+
+**The general rule, which this project had not stated:** a control proves both arms took the
+same path. It cannot prove the path preserved the thing being measured. Before trusting one,
+measure the pipeline's resolution against the size of the effect — and if the effect is
+smaller, no control rescues the comparison, because both arms are being rounded to the same
+place.

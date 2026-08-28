@@ -190,13 +190,17 @@ broker routing rather than model behaviour.
 
 - **No tuning win has been published, and none can be yet.** The first QLoRA run finished on
   2026-08-27 (rank 8 over the top 8 layers, 896 distilled samples, 224 optimizer updates,
-  6h08m local, holdout loss 1.566 → 0.859), but a loss curve is not a result. The drop is
-  front-loaded — 94% of it inside the first 28 updates — which is the expected shape for
-  learning an output *format*, and these training records are a 1,365-token system prompt
-  plus a six-field JSON response. Whether the behaviour this track cares about changed is
-  not separable from schema fitting by that curve. The tuned checkpoint has not been fused,
-  served, or judged. Until it is measured against the untuned control on the item-paired
-  sign test, the honest claim is that training ran and was healthy, not that it worked.
+  6h08m local, holdout loss 1.566 → 0.859). It was fused, served, and measured, and it failed
+  a hard regression gate: `altsExactlyTwo` 100% → **22.5%**. The cause is not the training.
+  Served with the adapter applied at inference, every checkpoint obeys the rule; fused into
+  the checkpoint, the same weights do not — and they fail identically inside MLX and inside
+  Ollama, so it is the fuse rather than the importer. The mechanism is that the LoRA delta
+  (mean 2.81e-4) is the size of the int4 re-quantisation's own rounding error (2.6e-4), so
+  re-quantising rounds the learned change away instead of carrying it through
+  ([§7.7](ENGINEERING-LOG.md#77-the-fuse-destroyed-what-the-training-learned-2026-08-27)).
+  The paid judge was queued behind this measurement and did not run — judging here would have
+  scored a model the fuse had corrupted and reported it as a fine-tuning result. Measurement
+  continues on an unfused serving path.
 - **The untuned control exists and is measured** (2026-08-27), which closed the last of the
   seven pre-evaluation blockers. It immediately earned its cost: with weights mathematically
   identical to the product baseline, 31 of 40 `natural` outputs differ, and the absolute
