@@ -787,3 +787,54 @@ precisely because absolute rates hide item-level churn, and it has not run. No s
 claimed. No failure is declared either, and the difference is not a hedge — declaring failure
 on the criterion that was explicitly designated secondary, because the primary one was
 unaffordable, would be the same substitution the sign test exists to prevent.
+
+### 7.10 The verdict: the first tuning run did not work (2026-08-28)
+
+The pairwise sign test completed — 40 of 40 items, both A/B orders, zero failures, fixed
+`anthropic/claude-sonnet-5`, both arms served through the verified unfused path (§7.8).
+
+| criterion | candidate wins | control wins | ties | exact sign test |
+|---|---|---|---|---|
+| `natural` | 5 | 12 | 23 | p = 0.143 |
+| `nuance` | 5 | 14 | 21 | p = 0.064 |
+
+The success criterion, fixed before training began, was candidate wins > control wins on
+**both** `natural` and `nuance` with p < 0.05. The candidate loses both, roughly 1 to 2.5.
+**This run failed, and the direction is the wrong one.**
+
+What can be claimed precisely: there is no evidence the tuning helped, and the point estimate
+on both criteria favours the untuned model. Neither result clears p < 0.05, so "significantly
+worse" is not established either — `nuance` at p = 0.064 is suggestive of harm and nothing
+more. The honest summary is a failed run with a consistently negative direction, corroborated
+by the absolute judge in §7.9 (`naturalFluent` −5.0pp, `tipFactual` −12.5pp) and by compliance
+(`altsExactlyTwo` 100% → 97.5%). Four independent measurements, none of them positive.
+
+**More than half of the items are ties** — 23 on `natural`, 21 on `nuance` — and the judge's
+notes say why: on the harder idioms both models fail the same way. `발이 넓다` read as literal
+foot size in both. `입이 무겁다` as "quiet" rather than "discreet" in both. `철들다` as "get a
+grip" in both. `눈치` as "watch for danger" in both. The tuning did not move the model on the
+items the benchmark exists to test, because it never saw one.
+
+That is the diagnosis this run was worth its six hours to produce, and it was predicted:
+the 896 training sentences are FLORES wiki and news prose containing **zero idioms**, while
+success is judged on 40 idiom items. The distribution mismatch was recorded before training as
+a risk; the tie counts are now its measurement. The model learned the teacher's output *format*
+— which is what the front-loaded loss curve showed (§7.6, 94% of the drop in 28 updates) — and
+learned nothing about idioms, because there was nothing about idioms to learn.
+
+**The by-slice split points the same way.** On `idiom-business` the candidate wins 1 of 20 on
+`natural` against the control's 5, with 14 ties; on `idiom-casual` it wins 4 against 7, with 9
+ties. Business idioms are almost entirely ties — formulaic phrases where both models produce
+the same serviceable output and tuning had no room to change anything.
+
+**What this rules out, which is the useful part.** It is not "fine-tuning does not work here".
+It is that fine-tuning on data with none of the target phenomenon does not work here, which is
+a much narrower and more actionable claim. The next run has a specific instruction rather than
+a hunch: build idiom training data (`FINETUNING.md` 4.2.1 gives the procedure, including the
+eval-overlap removal that a hand-written set needs), and re-measure against this same control.
+Raising rank or learning rate first would be pushing harder on data that does not contain the
+answer.
+
+Total measured cost of reaching a defensible negative: ~$11.5 across the whole project, of
+which this run's judging was ~$1.5. The result is worth more than a claimed win would have
+been, because it is the one a reader can check.
