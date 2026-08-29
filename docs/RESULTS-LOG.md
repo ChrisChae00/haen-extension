@@ -27,8 +27,8 @@ compliance, latency, cost, and LLM judgement.
 | Dataset | 212 items (FLORES-200 devtest 200 + 12 hand-written) + 40 judge-only idiom items, both directions |
 | Total API calls (2026-08-22 measurement snapshot) | 3,200+ (212 × 2–3 runs per model) |
 | Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
-| Paid judge verdicts | 476 (`claude-sonnet-5`, fixed) — 316 at the 2026-08-22 snapshot, +40 untuned control 2026-08-27, +82 absolute and +38 pairwise on the two unfused arms 2026-08-28 |
-| Total paid measurement cost | ~$11.5 (OpenRouter $9.90 + Google AI Studio $1.6) as of 2026-08-28; $7.9 at the 2026-08-22 snapshot. The OpenRouter grant is exhausted, which stopped the pairwise sign test at 17 of 40 items |
+| Paid judge verdicts | 476 (`claude-sonnet-5`, fixed) — 316 at the 2026-08-22 snapshot, +40 untuned control 2026-08-27, +82 absolute and +80 pairwise on the two unfused arms 2026-08-28 |
+| Total paid measurement cost | ~$12.0 (OpenRouter ~$10.4 + Google AI Studio $1.6) as of 2026-08-28; $7.9 at the 2026-08-22 snapshot |
 | Fine-tuning run (2026-08-27) | QLoRA rank 8 / top 8 layers on Qwen3-14B-4bit, 896 distilled samples, 224 updates, 6h08m local, peak 15.6 GB of 24 GB; holdout loss 1.566 → 0.859 |
 | Harness tests (2026-08-27) | 70 passing (zero dependencies) |
 
@@ -208,14 +208,22 @@ broker routing rather than model behaviour.
   75.0% → 70.0%, `nuanceGrounded` 27.5% → 30.0%, `altsDistinct` 50.0% → 55.0%, `tipFactual`
   62.5% → 50.0%. The two criteria this track exists to improve did not improve. Compliance
   regressed by one item (`altsExactlyTwo` 100% → 97.5%, a malformed JSON object).
-- **The primary criterion has not run.** The item-paired pairwise sign test needs both A/B
-  orders on all 40 items and stopped at 17 when the OpenRouter grant ran out; the completeness
-  gate refused to emit a p-value on a partial subset, and the partial counts are not quoted
-  because the finished items are the first by dataset order, not a random sample. Resuming
-  costs about $0.44. Until it runs there is no verdict — the absolute rates are the secondary
-  criterion precisely because they hide the item-level churn (10–15 items flip on every
-  criterion here), and reading a verdict off them would be the substitution the sign test
-  exists to prevent.
+- **The primary criterion ran, and the run failed it.** The item-paired pairwise sign test
+  completed on all 40 items in both A/B orders, zero failures: `natural` candidate 5 / control
+  12 / 23 ties, p = 0.143; `nuance` candidate 5 / control 14 / 21 ties, p = 0.064. The
+  criterion fixed before training was candidate > control on both with p < 0.05. The candidate
+  loses both. No evidence the tuning helped, and the point estimate favours the untuned model
+  on both criteria; neither clears p < 0.05, so "significantly worse" is not established
+  either
+  ([§7.10](ENGINEERING-LOG.md#710-the-verdict-the-first-tuning-run-did-not-work-2026-08-28)).
+- **The tie counts diagnose it.** Over half the items tie — 23 and 21 of 40 — because on the
+  harder idioms both models fail identically: `발이 넓다` as literal foot size, `입이 무겁다` as
+  "quiet" rather than "discreet", `철들다` as "get a grip", `눈치` as "watch for danger". The
+  896 training sentences are FLORES wiki and news prose containing zero idioms while success is
+  judged on 40 idiom items, so the model learned the teacher's output format — the front-loaded
+  loss curve — and nothing about idioms. That narrows the claim usefully: not "fine-tuning does
+  not work here", but "fine-tuning on data without the target phenomenon does not work here".
+  The next run builds idiom training data and re-measures against this same control.
 - **The untuned control exists and is measured** (2026-08-27), which closed the last of the
   seven pre-evaluation blockers. It immediately earned its cost: with weights mathematically
   identical to the product baseline, 31 of 40 `natural` outputs differ, and the absolute
