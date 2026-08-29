@@ -809,11 +809,29 @@ more. The honest summary is a failed run with a consistently negative direction,
 by the absolute judge in §7.9 (`naturalFluent` −5.0pp, `tipFactual` −12.5pp) and by compliance
 (`altsExactlyTwo` 100% → 97.5%). Four independent measurements, none of them positive.
 
-**More than half of the items are ties** — 23 on `natural`, 21 on `nuance` — and the judge's
-notes say why: on the harder idioms both models fail the same way. `발이 넓다` read as literal
-foot size in both. `입이 무겁다` as "quiet" rather than "discreet" in both. `철들다` as "get a
-grip" in both. `눈치` as "watch for danger" in both. The tuning did not move the model on the
-items the benchmark exists to test, because it never saw one.
+**More than half of the items are ties** — 23 on `natural`, 21 on `nuance` — but they are not
+the same kind of tie, and an early reading of this entry conflated them. Cross-referencing the
+absolute verdicts: of the 23 `natural` ties only **2** are items both models failed; the other
+21 are items both models passed. Of the 21 `nuance` ties, **11** are shared failures. So the
+judge's notes about both models breaking the same idioms — `발이 넓다` as literal foot size,
+`입이 무겁다` as "quiet" rather than "discreet", `철들다` as "get a grip", `눈치` as "watch for
+danger" — describe the `nuance` ties, not the `natural` ones. On `natural` the two models are
+mostly tied because both are already adequate.
+
+**The teacher solves almost all of the shared failures**, which is the number that decides what
+to do next. `gemini-3.7-flash` passes 2 of 2 shared `natural` failures and 10 of 11 shared
+`nuance` failures. Measured as a ceiling over the full 40 items against this control:
+
+| criterion | control | teacher | items the teacher wins / loses |
+|---|---|---|---|
+| `naturalFluent` | 75.0% | 100.0% | +10 / −0 |
+| `nuanceGrounded` | 27.5% | 95.0% | **+27 / −0** |
+| `altsDistinct` | 50.0% | 82.5% | +14 / −1 |
+| `tipFactual` | 62.5% | 97.5% | +15 / −1 |
+
+Distillation is not out of room — it has 27 items of headroom on the primary target and has
+captured none of them. The teacher has the answers and the training set never asked the
+questions.
 
 That is the diagnosis this run was worth its six hours to produce, and it was predicted:
 the 896 training sentences are FLORES wiki and news prose containing **zero idioms**, while

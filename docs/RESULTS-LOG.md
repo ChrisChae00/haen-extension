@@ -216,14 +216,18 @@ broker routing rather than model behaviour.
   on both criteria; neither clears p < 0.05, so "significantly worse" is not established
   either
   ([§7.10](ENGINEERING-LOG.md#710-the-verdict-the-first-tuning-run-did-not-work-2026-08-28)).
-- **The tie counts diagnose it.** Over half the items tie — 23 and 21 of 40 — because on the
-  harder idioms both models fail identically: `발이 넓다` as literal foot size, `입이 무겁다` as
-  "quiet" rather than "discreet", `철들다` as "get a grip", `눈치` as "watch for danger". The
-  896 training sentences are FLORES wiki and news prose containing zero idioms while success is
-  judged on 40 idiom items, so the model learned the teacher's output format — the front-loaded
-  loss curve — and nothing about idioms. That narrows the claim usefully: not "fine-tuning does
-  not work here", but "fine-tuning on data without the target phenomenon does not work here".
-  The next run builds idiom training data and re-measures against this same control.
+- **The tie counts diagnose it, once separated by kind.** Of the 23 `natural` ties only 2 are
+  shared failures — the rest are items both models already pass. Of the 21 `nuance` ties, 11
+  are shared failures, and those are where the judge notes repeat: `발이 넓다` as literal foot
+  size, `입이 무겁다` as "quiet" rather than "discreet", `철들다` as "get a grip".
+- **The teacher clears almost all of them, so the ceiling is not the problem.** Measured over
+  the same 40 items, `gemini-3.7-flash` against this control: `naturalFluent` 75.0% → 100.0%
+  (+10 items, −0), `nuanceGrounded` 27.5% → **95.0% (+27, −0)**, `altsDistinct` 50.0% → 82.5%,
+  `tipFactual` 62.5% → 97.5%. Distillation has 27 items of headroom on the primary target and
+  captured none of it, because the 896 training sentences are FLORES wiki and news prose with
+  zero idioms while success is judged on 40 idiom items. The model learned the teacher's output
+  format — the front-loaded loss curve — and nothing about idioms. Not "fine-tuning does not
+  work here", but "fine-tuning on data without the target phenomenon does not work here".
 - **The untuned control exists and is measured** (2026-08-27), which closed the last of the
   seven pre-evaluation blockers. It immediately earned its cost: with weights mathematically
   identical to the product baseline, 31 of 40 `natural` outputs differ, and the absolute
