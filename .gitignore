@@ -72,4 +72,6 @@ __pycache__/
 bench/tuning/zero-adapter/
 bench/tuning/fused-untuned-control/
 bench/tuning/adapters-run*/
+bench/tuning/memory-*.log
+bench/tuning/train-*.log
 bench/tuning/fused-run*/
