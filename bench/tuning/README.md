@@ -5,6 +5,8 @@ reproducible from a cached base checkpoint; the multi-GB outputs are not committ
 
 ```
 lora-run1.yaml            Phase 5's first training run, with the reasoning in comments
+train.sh                  runs a training config with memory sampling attached
+memwatch.sh               samples swap and memory pressure while a job is in flight
 make_zero_adapter.py      builds a LoRA adapter that provably changes nothing
 verify_zero_fuse.py       proves the fused control is the base model, and measures the
                           fuse round trip's own noise floor
@@ -73,8 +75,11 @@ instead of being attributed to LoRA.
 ## Training a candidate
 
 ```bash
-../../.venv-mlx/bin/python -m mlx_lm lora -c lora-run1.yaml
+tuning/train.sh tuning/lora-run1.yaml
 ```
+
+Use `train.sh` rather than calling `mlx_lm lora` directly. It writes a timestamped training
+log and a memory log side by side and prints a one-line summary of both when the run ends.
 
 Outputs land in `adapters-run1/` (gitignored): `adapters.safetensors` plus a numbered
 checkpoint every `save_every` iters.
@@ -83,6 +88,15 @@ checkpoint every `save_every` iters.
 below. Serve the adapter unfused instead.
 
 Run 1 measured: 6h08m for 1,792 iters, peak 15.617 GB of 24 GB, holdout loss 1.566 -> 0.859.
+
+**Peak resident memory is not the whole memory story.** 15.617 GB of 24 GB looks comfortable
+and says nothing about whether the OS was swapping to keep it there - which costs SSD writes
+and wall time and appears in no field the run already logs. Run 1 was never sampled for it,
+and the counters are cumulative since boot, so once the machine rebooted the answer became
+unrecoverable. Reproduced afterwards on the same config and hardware, sampled every 15s: swap
+usage moved 420.44 -> 428.44 MB and **new swapouts were zero**, with free memory bottoming at
+23% (79% idle). So this configuration does not swap on a 24 GB machine. `train.sh` records it
+per-run from now on, because that is evidence and the reproduction is only an argument.
 
 ## Two more things worth not rediscovering
 

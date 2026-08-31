@@ -856,3 +856,38 @@ answer.
 Total measured cost of reaching a defensible negative: ~$11.5 across the whole project, of
 which this run's judging was ~$1.5. The result is worth more than a claimed win would have
 been, because it is the one a reader can check.
+
+### 7.11 Peak memory was measured; swap was not (2026-08-31)
+
+Run 1 recorded MLX's peak resident memory at every report interval — 14.609 GB rising to
+15.617 GB of 24 GB — and that number was quoted as evidence the run fit comfortably. It is
+evidence of one thing only: how much memory the process held. It says nothing about what the
+operating system did to keep it there. A run can sit at a comfortable-looking peak while the
+machine pays for it in swap, which costs SSD write endurance and wall-clock time and appears
+in no field the training log contains.
+
+Swap was never sampled during run 1, and the question turned out to be unanswerable after the
+fact: `vm_stat`'s swap counters are cumulative since boot, and the machine had rebooted on
+2026-08-29, two days after the run. The counters that would have held the answer were gone.
+This is a different failure from the ones in §7.8 and §10 — nothing was asserted falsely. The
+measurement simply was not taken, and the window to take it had closed.
+
+Reproduced instead on the same configuration and hardware: the same config at 100 iterations,
+sampled every 15 seconds for 33 samples. Swap in use moved 420.44 → 428.44 MB against a
+1,024 MB swap file, **new swapouts were zero**, and free memory bottomed at 23% against 79%
+idle. Run 1's own log shows peak memory reaching 15.029 GB by iteration 80 and settling at
+15.617 GB, so the memory ceiling is inside the reproduced window; a longer run does not visit
+a state this one missed. The configuration does not swap on a 24 GB machine.
+
+That is an argument, not a record — it establishes what this config does on this hardware, not
+what happened during run 1. The fix is that the answer stops depending on someone remembering
+to ask. `bench/tuning/memwatch.sh` samples swap, memory pressure, and swapout deltas to a log;
+`bench/tuning/train.sh` starts it alongside any training config, writes both logs under
+matching timestamps, and prints a one-line summary at the end — including an explicit warning
+line if the run caused any swapouts.
+
+The general shape is worth separating from the specific metric. **A measurement that is only
+available while a job runs has to be taken during the job or not at all**, and the ones most
+likely to be skipped are exactly those the process cannot see about itself. Peak memory is
+self-reported and therefore always in the log. Swap is the operating system's view of the same
+event, and nothing in the training loop was ever going to record it.
