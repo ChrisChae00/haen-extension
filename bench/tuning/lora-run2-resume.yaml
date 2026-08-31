@@ -1,0 +1,71 @@
+# Phase 5, second QLoRA run - RESUME leg. Identical to run 1 except the data and the epoch
+# count: run 1 failed the sign test because its 896 training sentences contained
+# zero idioms while success is judged on 40 idiom items (ENGINEERING-LOG 7.10).
+# Changing only the data is what makes the comparison readable - if run 2 moves,
+# the idiom data is why.
+#
+# Shape must still match make_zero_adapter.py (rank 8, top 8 layers), or the
+# untuned control passes through a different set of fused layers than this does.
+model: "mlx-community/Qwen3-14B-4bit"
+train: true
+data: "../datasets/train/teacher-run2"
+
+fine_tune_type: lora
+num_layers: 8
+lora_parameters:
+  rank: 8
+  scale: 20.0
+  dropout: 0.0
+
+# The system prompt is ~1,365 tokens of a ~1,170-token median record, so without
+# mask_prompt roughly three quarters of the loss is spent predicting a fixed
+# string the model is always handed at inference. This is behaviour correction,
+# not knowledge injection: only the teacher's response should carry gradient.
+mask_prompt: true
+
+optimizer: adam
+learning_rate: 2e-5
+batch_size: 1
+grad_accumulation_steps: 8
+
+# `iters` counts MICRO-batches, not optimizer steps: trainer.py's loop is
+# `zip(range(1, iters+1), iterate_batches(batch_size=...))`. At batch_size 1 that
+# is one training record per iter. The train split is now 1,345 records (896
+# FLORES prose + 449 idioms), so this is ONE epoch and 168 Adam updates.
+#
+# Run 1 used two epochs and measured what the second one bought: holdout loss
+# 0.867 after one epoch, 0.859 after two. 0.008, against 0.623 from the first 28
+# updates. One epoch, at half the wall time, is the measured choice rather than
+# the cautious one.
+# Resuming from run 2's iteration-672 checkpoint after the machine slept and the job died at
+# iteration 880. `iters` restarts at 1 on resume, so this is the REMAINDER: 1345 - 672 = 673.
+iters: 673
+
+# Weights only - mlx_lm saves no optimizer state, so Adam's moments reset here. The learning
+# rate is a constant with no schedule, so that part is unaffected; what is lost is roughly ten
+# steps of momentum direction out of 168 updates. Small, and stated rather than hidden.
+resume_adapter_file: "adapters-run2/0000672_adapters.safetensors"
+
+# Longest record measured over train+valid is 1,456 tokens; mlx_lm truncates at
+# this limit silently, so it sits above the observed max rather than at it.
+max_seq_length: 1536
+
+steps_per_report: 40
+
+# Validation costs 667s for the full holdout, so evaluating often is tempting to
+# fix by sampling. It is not available: iterate_batches draws val batches through
+# np.random.permutation, so val_batches: 25 scores a DIFFERENT random 25 each
+# time and the losses are not comparable across evals. The holdout exists to tell
+# memorised teacher style from learned behaviour, which needs a curve that can be
+# read - so keep the whole set and take fewer points. The holdout is 150 records
+# now (100 prose + 50 idiom), so each evaluation costs proportionally more; every
+# 224 iters still gives 6 points across the run.
+steps_per_eval: 224
+val_batches: -1
+save_every: 224
+# A fresh directory: numbered checkpoints restart at 224 on resume and would overwrite the
+# first attempt's, destroying the only record of what it reached.
+adapter_path: "adapters-run2b"
+# Different seed on purpose. iterate_batches draws from a seeded permutation, so resuming with
+# the same seed would replay the exact records the first 673 iterations already saw.
+seed: 20260901

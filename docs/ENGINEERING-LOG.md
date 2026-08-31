@@ -891,3 +891,49 @@ available while a job runs has to be taken during the job or not at all**, and t
 likely to be skipped are exactly those the process cannot see about itself. Peak memory is
 self-reported and therefore always in the log. Swap is the operating system's view of the same
 event, and nothing in the training loop was ever going to record it.
+
+### 7.12 A ten-hour job that a closed lid could kill (2026-08-31)
+
+Run 2 was configured for one epoch — 1,345 iterations, estimated three hours from run 1's
+measured rate. It stopped at iteration 880 with no error, no traceback, and no summary line:
+the wrapper process itself was gone, so nothing inside the training loop had failed.
+
+The memory log written by `train.sh` (§7.11) is what made the cause legible, and it is the
+first time that instrumentation paid for itself:
+
+| when | swapouts since start | note |
+|---|---|---|
+| 07:26 | 2,460 | model load, ~39 MB, matches the swap-usage step exactly |
+| 07:48 | 9,476 | |
+| 07:48 → 16:49 | **flat for nine hours** | training itself caused no swapping |
+| 16:49 | 41,496 | swap file grew 1,024 → 2,048 MB |
+
+Two things fall out of the timestamps. The sampler is on a 30-second interval and recorded 519
+samples across 10.6 hours, where 1,270 were due; individual gaps stretch to 13.7 minutes. A
+sampler that sleeps 30 seconds and wakes 13 minutes later was not descheduled by memory
+pressure — the machine was asleep. And accounting for the work actually done (880 iterations
+at the logged 0.085 it/s, plus four evaluations totalling 1.4 hours) gives 4.3 hours of
+compute inside a 10.6-hour window. **Six hours are missing, and no reboot occurred.**
+
+The job died in that state, most plausibly during a sleep or wake transition. What matters is
+that a multi-hour local job had no protection against it, and that the failure was silent:
+without the memory log there would have been an interrupted run, no error, and no way to
+distinguish "the machine slept" from "training crashed" — two problems with opposite fixes.
+
+The fix is `caffeinate -ims` around the training call in `train.sh`, not a retry loop. A job
+that a closed lid can end is not a job.
+
+**A correction to §7.11.** That entry concluded "this configuration does not swap on a 24 GB
+machine", from 33 samples over eight minutes on run 1's config. Run 2 — 1,345 training records
+and a 150-record holdout instead of 896 and 100 — swapped 41,496 pages and doubled the swap
+file. The narrower statement the evidence supported was always "run 1's config, at this moment,
+on an otherwise idle machine". Sampling per-run is what turned that from an argument into a
+record, and the first run it recorded contradicted the generalisation. That is the instrument
+working, not failing.
+
+Resumed from the iteration-672 checkpoint rather than restarting: `mlx_lm` saves no optimizer
+state, so Adam's moments reset, but the learning rate is a constant with no schedule and what
+is lost is roughly ten steps of momentum out of 168 updates. The resume config uses a new seed
+(the batch permutation is seeded, so the same seed would replay the records already seen) and
+a new adapter directory (numbered checkpoints restart at 224 on resume and would overwrite the
+first attempt's, destroying the only record of what it reached).

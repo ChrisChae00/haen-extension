@@ -33,9 +33,13 @@ trap 'kill "$watcher" 2>/dev/null || true' EXIT
 echo "  config     $config"
 echo "  train log  tuning/$train_log"
 echo "  memory log tuning/$mem_log"
+# caffeinate, because run 2 lost six of its ten wall-clock hours to the machine sleeping and
+# then died without an error or a summary - the wrapper itself was gone. A multi-hour training
+# job that a closed lid can kill is not a job, it is a coin flip. -i idle, -m disk, -s system.
+#
 # Deliberately not under `set -e`: when training fails is exactly when the memory log matters,
 # and aborting here would skip the summary below.
-../../.venv-mlx/bin/python -m mlx_lm lora -c "$config" > "$train_log" 2>&1
+caffeinate -ims ../../.venv-mlx/bin/python -m mlx_lm lora -c "$config" > "$train_log" 2>&1
 status=$?
 [ "$status" -eq 0 ] || echo "  !! training exited $status - see tuning/$train_log"
 
