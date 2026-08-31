@@ -474,3 +474,61 @@ direction, not tuning. §11's conclusion stands on the compliance collapse, whic
 but the supporting observation was wrong. A single-item observation is an anecdote even when
 the surrounding argument is sound, and it does not become evidence by sitting next to real
 evidence.
+
+## 13. Surveying datasets against the failure, not the label (2026-08-31)
+
+Run 1 failed because the training set contained none of the phenomenon being judged
+(ENGINEERING-LOG §7.10). Fixing that meant finding Korean idiom sentences, and six public
+datasets were proposed or surfaced. Five were rejected, and the reasons are worth keeping
+because they are not the reasons a dataset card suggests.
+
+The requirement is narrower than "an idiom dataset". The teacher generates the six-field JSON
+target, so the dataset's own labels, definitions and translations are all discarded. What is
+needed is **source sentences containing idioms, in the register the eval scores** — and the
+eval is conversational and business Korean (`눈치 좀 챙겨`, `총대 메겠습니다`), not proverbs and
+not literary text. That reframing decides every case below, and it means a dataset built for a
+completely different task can still be the right one, while a dataset whose title matches
+exactly can be useless.
+
+| Candidate | What it actually is | Why not |
+|---|---|---|
+| `Poppo/KoGEM` | Korean **grammar** benchmark, 1,524 multiple-choice items, tags `grammar` / `linguistic_competence` | Not idioms, and multiple-choice items are not source sentences |
+| `psyche/korean_idioms` | 7,984 **proverb** (속담) multiple-choice items | Register mismatch, and again not sentences |
+| `cahya/instructions-ko` | `id` / `text`, 1,770 rows, **no license declared** | No evidence of idiom content on the card; unlicensed |
+| `jaeyoungpark/kor_idiom` | <1K rows, 10 downloads, one undocumented file | Too small to verify or use |
+| `fdelucaf/IdioTS` | English/Spanish, <1K, CC-BY-NC-SA | No Korean, non-commercial, too small |
+| `aymansharara/IdiomX` | English/Arabic/French, 190K, MIT | No Korean; the English contexts are synthetic and adversarial by design (`"'Ark at 'ee, as if you could ever finish on time!"`), built to train detectors rather than to read as natural speech |
+
+Four models were also proposed as if they were data — a TTS model, a sentiment classifier, a
+500M instruct LLM, and a Korean embedding model. Only the last has any use here, and a narrow
+one: near-duplicate detection against the eval set, which would close the documented
+exact-match ceiling in the leakage guard (§10). Even that is only safe as **a candidate list a
+human reviews**, never as an automatic gate — an embedding threshold is as arbitrary as the
+substring matching rejected in §10, and a gate that cries wolf gets muted.
+
+**Selected: `binjang/NIKL-korean-english-dictionary`** (MIT, 53,172 headwords, the National
+Institute of Korean Language's basic dictionary). It is a dictionary rather than an idiom
+corpus, which is exactly why it works: multi-word headwords with verbal endings are idioms,
+and each carries usage sentences written as natural Korean.
+
+Two filters were added only after reading the output, and both caught real defects:
+
+- **Bound forms.** `-아 주다`, `-으려고 들다` pass every structural filter — multi-word, verbal,
+  short — and are grammar, not idiom.
+- **Usages that do not contain their idiom.** Some entries store dialogue where only one turn
+  carries the headword, so `줄(을) 놓다` arrives attached to `동생이 일 때문에 재판을 받게 됐어.`
+  A source sentence without its idiom teaches nothing about that idiom, which is run 1's
+  mistake in miniature. 197 entries were dropped this way.
+
+Yield: 4,146 multi-word headwords → 3,976 with usages → 2,446 verbal → 1,729 after the two
+filters above → 500 taken on an even stride across the sorted list. The stride matters: the
+list is sorted by headword, so a prefix would be one corner of the alphabet and one cluster of
+idiom families.
+
+**A known limitation, stated now rather than discovered later.** NIKL usage sentences run a
+median of 34 characters; the eval's Korean items run a median of 11. The idiom is present, but
+embedded in written, explanatory sentences rather than terse spoken ones. Whether the skill
+transfers across that register gap is exactly what run 2 measures, and if run 2 improves the
+idiom set without improving these, the register gap is the first thing to suspect. The
+alternative — writing short conversational sentences to order — trades a measurable mismatch
+for unmeasurable synthetic-data bias, which is worse.

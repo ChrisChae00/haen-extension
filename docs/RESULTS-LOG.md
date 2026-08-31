@@ -30,7 +30,7 @@ compliance, latency, cost, and LLM judgement.
 | Paid judge verdicts | 476 (`claude-sonnet-5`, fixed) — 316 at the 2026-08-22 snapshot, +40 untuned control 2026-08-27, +82 absolute and +80 pairwise on the two unfused arms 2026-08-28 |
 | Total paid measurement cost | ~$12.0 (OpenRouter ~$10.4 + Google AI Studio $1.6) as of 2026-08-28; $7.9 at the 2026-08-22 snapshot |
 | Fine-tuning run (2026-08-27) | QLoRA rank 8 / top 8 layers on Qwen3-14B-4bit, 896 distilled samples, 224 updates, 6h08m local, peak 15.6 GB of 24 GB; holdout loss 1.566 → 0.859 |
-| Harness tests (2026-08-27) | 70 passing (zero dependencies) |
+| Harness tests (2026-08-31) | 75 passing (zero dependencies) |
 
 ---
 
