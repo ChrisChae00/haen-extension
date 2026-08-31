@@ -8,10 +8,19 @@
 # rather than in a habit.
 #
 # Usage: tuning/train.sh <config.yaml> [memwatch_interval_seconds]
-set -euo pipefail
-cd "$(dirname "$0")"
+set -uo pipefail
 
-config="${1:?usage: train.sh <config.yaml> [interval]}"
+# Resolve the config against the caller's directory before moving: this script cd's into its
+# own directory so mlx_lm's relative `data:` path works, which silently breaks any relative
+# config path the caller passed.
+config_arg="${1:?usage: train.sh <config.yaml> [interval]}"
+case "$config_arg" in
+  /*) config="$config_arg" ;;
+  *)  config="$PWD/$config_arg" ;;
+esac
+[ -f "$config" ] || { echo "no such config: $config_arg"; exit 1; }
+
+cd "$(dirname "$0")"
 interval="${2:-30}"
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 train_log="train-${stamp}.log"
@@ -24,8 +33,11 @@ trap 'kill "$watcher" 2>/dev/null || true' EXIT
 echo "  config     $config"
 echo "  train log  tuning/$train_log"
 echo "  memory log tuning/$mem_log"
+# Deliberately not under `set -e`: when training fails is exactly when the memory log matters,
+# and aborting here would skip the summary below.
 ../../.venv-mlx/bin/python -m mlx_lm lora -c "$config" > "$train_log" 2>&1
 status=$?
+[ "$status" -eq 0 ] || echo "  !! training exited $status - see tuning/$train_log"
 
 kill "$watcher" 2>/dev/null || true
 trap - EXIT

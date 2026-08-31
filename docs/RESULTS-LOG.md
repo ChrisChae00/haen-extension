@@ -28,9 +28,9 @@ compliance, latency, cost, and LLM judgement.
 | Total API calls (2026-08-22 measurement snapshot) | 3,200+ (212 × 2–3 runs per model) |
 | Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
 | Paid judge verdicts | 476 (`claude-sonnet-5`, fixed) — 316 at the 2026-08-22 snapshot, +40 untuned control 2026-08-27, +82 absolute and +80 pairwise on the two unfused arms 2026-08-28 |
-| Total paid measurement cost | ~$12.0 (OpenRouter ~$10.4 + Google AI Studio $1.6) as of 2026-08-28; $7.9 at the 2026-08-22 snapshot |
+| Total paid measurement cost | ~$12.8 (OpenRouter ~$10.4 + Google AI Studio $2.5) as of 2026-08-31; $7.9 at the 2026-08-22 snapshot. Teacher batches: $1.649487 for 997 FLORES records, $0.815761 for 500 idiom records |
 | Fine-tuning run (2026-08-27) | QLoRA rank 8 / top 8 layers on Qwen3-14B-4bit, 896 distilled samples, 224 updates, 6h08m local, peak 15.6 GB of 24 GB; holdout loss 1.566 → 0.859 |
-| Harness tests (2026-08-31) | 75 passing (zero dependencies) |
+| Harness tests (2026-08-31) | 76 passing (zero dependencies) |
 
 ---
 
