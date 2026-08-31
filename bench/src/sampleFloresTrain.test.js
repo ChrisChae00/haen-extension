@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { DATASETS_DIR } from './dataset.js';
 
@@ -36,8 +36,16 @@ test('training sentences do not overlap the evaluation sets', (t) => {
 // to them - an idiom set pasted in to fix the training/eval distribution mismatch, say -
 // never passes the check above. Guard the files the trainer opens.
 test('the files the trainer reads do not overlap the evaluation sets', (t) => {
-  const trainFiles = ['train.jsonl', 'valid.jsonl'].map(n => path.join(DATASETS_DIR, 'train/teacher', n));
-  const present = trainFiles.filter(existsSync);
+  // Every teacher directory, discovered rather than listed. Naming one directory here is how
+  // this check went stale the first time: it named `train/raw.jsonl` while the trainer opened
+  // something else. A second batch (teacher-idioms-ko) would have walked through the same gap.
+  const trainDir = path.join(DATASETS_DIR, 'train');
+  const present = existsSync(trainDir)
+    ? readdirSync(trainDir)
+        .filter(name => name.startsWith('teacher'))
+        .flatMap(dir => ['train.jsonl', 'valid.jsonl'].map(n => path.join(trainDir, dir, n)))
+        .filter(existsSync)
+    : [];
   if (!present.length) return t.skip('no teacher training set built yet');
 
   const evalFiles = ['flores.jsonl', 'handbuilt.jsonl', 'handbuilt-ext.jsonl']
