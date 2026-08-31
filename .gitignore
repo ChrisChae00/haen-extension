@@ -43,8 +43,10 @@ bench/.cache/
 bench/datasets/*/flores.jsonl
 # distillation training sentences; regenerate byte-identically with `npm run sample-flores-train`
 bench/datasets/train/raw.jsonl
+bench/datasets/train/raw-idioms-ko.jsonl
 # paid teacher batch state, raw responses, and derived train/valid files
 bench/datasets/train/teacher/
+bench/datasets/train/teacher-idioms-ko/
 #
 # Raw run output stays local and is NOT committed - predictions.jsonl for the full set
 # across every model is large and churns. Keep it on disk forever regardless: re-scoring

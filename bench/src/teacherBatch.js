@@ -228,11 +228,27 @@ export async function submitBatch({ stateFile, payload, apiKey, fetchImpl = fetc
 const BENCH_DIR = fileURLToPath(new URL('../', import.meta.url));
 const REPO_DIR = fileURLToPath(new URL('../../', import.meta.url));
 const TRAIN_DIR = path.join(BENCH_DIR, 'datasets/train');
-const WORK_DIR = path.join(TRAIN_DIR, 'teacher');
-const RAW_FILE = path.join(TRAIN_DIR, 'raw.jsonl');
-const STATE_FILE = path.join(WORK_DIR, 'state.json');
-const PAYLOAD_FILE = path.join(WORK_DIR, 'payload.json');
-const OPERATION_FILE = path.join(WORK_DIR, 'operation.json');
+// A batch is keyed on the hash of its input, so adding items to an existing raw file makes a
+// different batch and re-pays for every item already collected - the FLORES set cost $1.65.
+// Naming a dataset switches the input file and the work directory together, so a second batch
+// runs beside the first instead of on top of it.
+const DATASETS = {
+  flores:      { raw: 'raw.jsonl',            work: 'teacher' },
+  'idioms-ko': { raw: 'raw-idioms-ko.jsonl',  work: 'teacher-idioms-ko' },
+};
+
+function paths(name = 'flores') {
+  const dataset = DATASETS[name];
+  if (!dataset) throw new Error(`unknown dataset ${name}; known: ${Object.keys(DATASETS).join(', ')}`);
+  const work = path.join(TRAIN_DIR, dataset.work);
+  return {
+    workDir: work,
+    rawFile: path.join(TRAIN_DIR, dataset.raw),
+    stateFile: path.join(work, 'state.json'),
+    payloadFile: path.join(work, 'payload.json'),
+    operationFile: path.join(work, 'operation.json'),
+  };
+}
 const MODEL = 'gemini-3.7-flash';
 
 function readJsonl(file) {
@@ -292,6 +308,11 @@ function usageSummary(records) {
 
 async function main() {
   const command = process.argv[2];
+  const flag = process.argv.indexOf('--dataset');
+  const { workDir: WORK_DIR, rawFile: RAW_FILE, stateFile: STATE_FILE,
+          payloadFile: PAYLOAD_FILE, operationFile: OPERATION_FILE } =
+    paths(flag === -1 ? 'flores' : process.argv[flag + 1]);
+  mkdirSync(WORK_DIR, { recursive: true });
   const items = readJsonl(RAW_FILE);
 
   if (command === 'prepare') {
@@ -342,7 +363,7 @@ async function main() {
     return;
   }
 
-  throw new Error('Usage: node src/teacherBatch.js prepare|submit|status|collect');
+  throw new Error('Usage: node src/teacherBatch.js prepare|submit|status|collect [--dataset flores|idioms-ko]');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
