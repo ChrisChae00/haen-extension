@@ -268,7 +268,7 @@ function geminiApiKey() {
   return value;
 }
 
-async function fetchOperation(state, apiKey) {
+async function fetchOperation(state, apiKey, { stateFile, operationFile }) {
   if (!state.jobName) {
     throw new Error(`batch is ${state.status} without a job ID; refusing any new submission`);
   }
@@ -277,7 +277,7 @@ async function fetchOperation(state, apiKey) {
   if (!response.ok) {
     throw new Error(`${response.status} ${body.error?.status ?? 'BATCH_STATUS_FAILED'}: ${body.error?.message ?? 'unknown error'}`);
   }
-  writeJsonAtomic(OPERATION_FILE, body);
+  writeJsonAtomic(operationFile, body);
   const next = {
     ...state,
     status: body.done ? (body.error ? 'failed' : 'succeeded') : 'running',
@@ -285,7 +285,7 @@ async function fetchOperation(state, apiKey) {
     lastCheckedAt: new Date().toISOString(),
     ...(body.error ? { remoteError: body.error } : {}),
   };
-  writeJsonAtomic(STATE_FILE, next);
+  writeJsonAtomic(stateFile, next);
   return { state: next, operation: body };
 }
 
@@ -330,7 +330,8 @@ async function main() {
 
   if (command === 'status') {
     const state = JSON.parse(readFileSync(STATE_FILE, 'utf8'));
-    const refreshed = await fetchOperation(state, geminiApiKey());
+    const refreshed = await fetchOperation(state, geminiApiKey(),
+      { stateFile: STATE_FILE, operationFile: OPERATION_FILE });
     console.log(JSON.stringify(refreshed.state, null, 2));
     return;
   }
