@@ -420,6 +420,20 @@ def write_report(m, path):
         L.append("> They are not comparable across judge model versions; the judge id is recorded above")
         L.append("> and in config.json for exactly that reason.\n")
 
+    if m.get("pairwise"):
+        pw = m["pairwise"]
+        L.append("## Head-to-head against the baseline (pairwise sign test)\n")
+        L.append(f"Judge: `{pw['judgeModelId']}`, {pw['n']} items, each scored in both A/B orders.")
+        L.append(f"Baseline run: `{pw['baselineRunId']}`.\n")
+        L.append("| criterion | candidate wins | baseline wins | ties | exact p |")
+        L.append("|---|---|---|---|---|")
+        for name, r in pw["criteria"].items():
+            L.append(f"| {name} | {r['candidateWins']} | {r['baselineWins']} | {r['ties']} | {r['pValue']:.4f} |")
+        L.append("")
+        L.append("> Ties are excluded from the test, not counted as evidence either way. A high tie")
+        L.append("> count means the two models mostly agree, which is itself a finding: read it before")
+        L.append("> reading the p-value.\n")
+
     if m.get("suspectRefs"):
         L.append("## Suspect references\n")
         L.append("Lowest-scoring items for the ceiling-anchor model. When the strongest model available")
@@ -531,6 +545,7 @@ def main():
         "operational": operational(primary, config, pricing),
         "runVariance": determinism(by_run, quality_by_run),
         "judge": load_judge(args.run_dir),
+        "pairwise": load_pairwise(args.run_dir),
         "suspectRefs": suspects or None,
     }
 
@@ -555,6 +570,19 @@ def load_pricing(bench_root):
     ):
         out[m.group(1)] = {"inputPer1M": float(m.group(2)), "outputPer1M": float(m.group(3)), "fetchedAt": m.group(4)}
     return out
+
+
+def load_pairwise(run_dir):
+    """Embed judge.js's pairwise sign test, written only after its completeness gate passes.
+
+    Not recomputed here. The p-value is the primary success criterion, and a second
+    implementation of it in another language is a second chance to disagree about ties,
+    order-balancing, or which tail the exact test uses.
+    """
+    path = run_dir / "pairwise-summary.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_judge(run_dir):

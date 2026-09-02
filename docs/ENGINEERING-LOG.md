@@ -1105,3 +1105,33 @@ Which one is the criterion was fixed before any of this ran, and it is the pairw
 That ordering is the only thing that keeps this from being a choice made after seeing the
 numbers — the absolute judge's +17.5 is precisely the number one would reach for. It is
 reported here, and it does not change the verdict.
+
+### 7.17 The number the verdict turns on was the one number not in the record (2026-09-02)
+
+Every secondary measurement this project takes lands in `metrics.json` and the consolidated
+`REPORT.md`: COMET, chrF++, fifteen compliance rules, latency percentiles, the absolute judge's
+four criteria. The pairwise sign test — the **only** comparison the project claims significance
+for — was printed to `judge.js`'s stdout and nowhere else. Two runs had been judged that way,
+and the p-values survived only because they were copied by hand into the logs.
+
+`judge.js` now writes `pairwise-summary.json` beside `pairwise.jsonl`; `score.py` embeds it into
+`metrics.json`; both `report.md` and `REPORT.md` render it. Regenerating from the existing
+caches cost nothing and reproduced both runs exactly, which is the cheapest possible check that
+the hand-copied numbers were right.
+
+Two choices inside that are the point of the entry.
+
+**The summary is written by `judge.js`, not recomputed in `score.py`.** Python could easily
+tally wins and run an exact binomial test, and then there would be two implementations of the
+primary criterion that could disagree about ties, order-balancing, or which tail the test uses.
+A statistic gets one home.
+
+**It is written after the completeness gate, not before.** The gate throws when any item lacks
+both A/B orders, so a partial run leaves its resume points on disk and no summary at all. The
+alternative — write it, mark it partial — puts a number where a reader can find it and hope the
+flag travels with it. Absent is a stronger guarantee than labelled.
+
+The general failure is worth naming because it is quiet: **the measurements that reach the
+report are the ones some pipeline already carries, not the ones that matter most.** Nothing was
+wrong with any number here. The criterion had simply never been wired into the artefact anyone
+would read, and the run that failed it was the second one, not the first.

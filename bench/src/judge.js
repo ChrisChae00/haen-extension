@@ -545,7 +545,21 @@ async function mainPairwise(args, runDir, candidateConfig) {
     throw new Error(`${incomplete.length} of ${subset.length} items lack both A/B orders (${incomplete.slice(0, 5).map(item => item.id).join(', ')}${incomplete.length > 5 ? ', ...' : ''}). No p-value is valid on a partial subset - re-run to resume.`);
   }
 
-  for (const [criterion, result] of Object.entries(pairwiseSignTests(rows))) {
+  // The primary success criterion lived only in this command's stdout, so metrics.json and the
+  // consolidated report carried every secondary number and not the one the verdict turns on.
+  // Written here rather than recomputed in score.py: two implementations of a p-value are two
+  // chances to disagree about it. This line is after the completeness gate above, so a partial
+  // run leaves its resume points on disk and no summary at all - never a stale one.
+  const signTests = pairwiseSignTests(rows);
+  writeFileSync(path.join(runDir, 'pairwise-summary.json'), JSON.stringify({
+    judgeModelId: candidateConfig.judgeModelId,
+    candidateRunId: candidateConfig.runId,
+    baselineRunId: baselineConfig.runId,
+    n: subset.length,
+    criteria: signTests,
+  }, null, 2) + '\n');
+
+  for (const [criterion, result] of Object.entries(signTests)) {
     console.log(`  ${criterion}: candidate ${result.candidateWins}, baseline ${result.baselineWins}, ties ${result.ties}, exact sign-test p=${result.pValue}`);
   }
 }

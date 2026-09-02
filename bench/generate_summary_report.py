@@ -239,6 +239,25 @@ def main():
             lines.append("> Judge scores carry the judge's own biases and are for relative comparison")
             lines.append("> between the models in this table only.\n")
 
+    # The pairwise sign test is the only comparison this project claims significance for, and
+    # it lived in judge.js's stdout until 2026-09-02 - so every secondary number reached this
+    # report and the one the verdict turns on did not.
+    paired = [r for r in runs if r.get("pairwise")]
+    if paired:
+        lines.append("## Head-to-head against a baseline (pairwise sign test)\n")
+        lines.append("| Candidate | Baseline | n | criterion | cand. wins | base. wins | ties | exact p |")
+        lines.append("|---|---|---|---|---|---|---|---|")
+        for r in paired:
+            pw = r["pairwise"]
+            name = r.get("config", {}).get("name", "Unknown")
+            for criterion, res in pw["criteria"].items():
+                lines.append(f"| {name} | `{pw['baselineRunId']}` | {pw['n']} | {criterion} | "
+                             f"{res['candidateWins']} | {res['baselineWins']} | {res['ties']} | {res['pValue']:.4f} |")
+        lines.append("")
+        lines.append("> Both A/B orders are judged for every item, and ties are excluded from the test")
+        lines.append("> rather than counted as evidence either way. A high tie count means the two models")
+        lines.append("> mostly agree - read it before reading the p-value.\n")
+
     content = "\n".join(lines) + "\n"
     report_file = bench_root / "REPORT.md"
     report_file.write_text(content, encoding="utf-8")
