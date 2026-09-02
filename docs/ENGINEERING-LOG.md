@@ -1188,3 +1188,51 @@ error this whole split exists to avoid.
 What the split does support is narrow and useful: **the improvement is not evidence that the
 idiom sources worked.** Buying more of them, or better ones, is not the obvious next move it
 looked like an hour ago.
+
+### 7.19 A fifteen-minute probe that replaced an eight-hour guess (2026-09-02)
+
+The direction split (§7.18) removed the reason to buy more idiom data, which left capacity as
+the remaining hypothesis with a mechanism behind it. Runs 1 and 2 both used `num_layers: 8` —
+the last 8 of Qwen3-14B's **40** transformer blocks, the final fifth of the stack, 6.4M
+trainable parameters or 0.043% of the model. An adapter confined there can reshape how the
+model phrases an answer and never touches where lexical and idiomatic meaning is resolved.
+That predicts precisely the split that was observed: style transferred, phenomenon did not.
+
+The obvious next run is the same configuration at `num_layers: 40`. Rather than start it and
+find out, a 40-iteration probe measured what it costs. It cost fifteen minutes and returned
+something the run would have discovered three hours in:
+
+```
+RuntimeError: [METAL] Command buffer execution failed: Insufficient Memory
+```
+
+Free memory bottomed at 6% and the probe wrote 99,844 swapout pages before dying. Backward
+through all 40 blocks stores five times the activations, and 24 GB does not hold them.
+
+`grad_checkpoint: true` recomputes activations in the backward pass instead of holding them.
+The second probe:
+
+| | run 2 (`num_layers: 8`) | probe (`num_layers: 40`, checkpointed) |
+|---|---|---|
+| peak memory | 15.616 GB | **11.901 GB** |
+| free memory, min | 11% | 27% |
+| new swapouts | 224,312 | **0** |
+| it/sec | 0.108 | 0.052 |
+
+**Training five times as many blocks uses less memory than run 2 did.** That number is worth
+sitting with, because it reinterprets §7.14. That entry established that run 2's swapping was
+not fragmentation and pointed at dataset size while explicitly declining to claim it. The real
+answer is now visible and it was neither: **the memory runs 1 and 2 paid for was stored
+activations, and the flag that eliminates them was available the whole time.** The swap was not
+the price of the run's size. It was the price of a default.
+
+The cost of the fix is wall clock — 0.052 it/s makes one epoch about 7.2 hours plus three
+evaluations — and it is not a second variable in the comparison. Gradient checkpointing changes
+what is held in memory, not what is computed; the gradients are identical, so run 3 still
+differs from run 2 in exactly one thing that can affect learning.
+
+The transferable part is the probe itself. **A configuration change whose cost is unknown gets
+measured at 40 iterations before it gets run at 1,345.** The failure here was not subtle and
+would have shown up early either way, but the useful output was not the crash: it was
+`0.052 it/s` and `11.901 GB`, two numbers that turned "roughly how long?" into a schedule and
+an evaluation interval chosen to keep evaluation under 4% of wall clock.
