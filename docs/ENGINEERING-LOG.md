@@ -1236,3 +1236,51 @@ measured at 40 iterations before it gets run at 1,345.** The failure here was no
 would have shown up early either way, but the useful output was not the crash: it was
 `0.052 it/s` and `11.901 GB`, two numbers that turned "roughly how long?" into a schedule and
 an evaluation interval chosen to keep evaluation under 4% of wall clock.
+
+### 7.20 The training set is unbalanced by direction, and the holdout moved with it (2026-09-02)
+
+§7.18 counted the training set by direction to attribute run 2's one improvement. Those counts
+carry two facts about the data that had not been written down as defects, only used as a
+measuring instrument.
+
+| | `ko_to_en` | `en_to_ko` |
+|---|---|---|
+| run 1 `teacher/train` | 449 (50%) | 447 (50%) |
+| run 2 `teacher-run2/train` | 898 (**67%**) | 447 (**33%**) |
+| eval `handbuilt-ext.jsonl` | 20 (50%) | 20 (50%) |
+
+**The training set is 2:1 toward one direction while the evaluation is 1:1.** Run 1 was
+balanced; adding the idiom sources made run 2 lopsided, because every NIKL source is Korean.
+
+The sharper version of the same fact is worse than the ratio. All 447 `en_to_ko` records are
+FLORES prose, so **`en_to_ko` contains zero idiom examples** — while all 20 of the evaluation's
+`en_to_ko` items are idioms. Half the thing being judged was never trained for at all. The
+existing note (MEASUREMENT-NOTES §13) recorded that no `en_to_ko` idiom source had been found
+and left it at that; what it did not say is that this makes run 2 a half-treatment measured
+against a whole test.
+
+**The holdout moved too, so two loss numbers that look comparable are not.** `teacher/valid`
+is 100 records at 49/51; `teacher-run2/valid` is 150 at 99/51. Run 1's final holdout loss of
+0.859 and run 2's 0.885 are computed over different sets with different composition. No entry
+in this log compares them directly, but nothing warned against it either, and the natural
+reading of "0.859 then 0.885" is a regression that the numbers cannot support. **Neither run's
+holdout loss is evidence about the other.**
+
+None of this changes what has already been concluded, and it is worth being exact about why:
+
+- **Run 3 is unaffected.** It trains on the same `teacher-run2` data as run 2, so the imbalance
+  is held constant and cannot explain a difference between them. That is what changing one
+  variable buys.
+- **§7.18's attribution is unaffected, and if anything strengthened.** The argument is that the
+  direction which received *no* new records improved as much as the one that received 449. A
+  larger imbalance makes that contrast sharper, not weaker.
+- **It does not resurrect the data hypothesis.** "Balance the directions and add `en_to_ko`
+  idioms" is the obvious repair, and §7.18 is the reason not to reach for it: adding 449
+  `ko_to_en` idiom records did not produce `ko_to_en` idiom skill. There is no mechanism by
+  which the same treatment in the other direction would behave differently.
+
+It does produce one concrete thing to watch. **If run 3 improves `ko_to_en` and not `en_to_ko`,
+the imbalance becomes the first suspect rather than a footnote** — that would be depth
+unlocking the data that exists, and the missing half of the data would then be the binding
+constraint. `score/direction_split.py` answers it for free. Writing the prediction down before
+the run finishes is what keeps it from being a story assembled around whatever comes back.
