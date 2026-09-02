@@ -1274,13 +1274,58 @@ None of this changes what has already been concluded, and it is worth being exac
 - **§7.18's attribution is unaffected, and if anything strengthened.** The argument is that the
   direction which received *no* new records improved as much as the one that received 449. A
   larger imbalance makes that contrast sharper, not weaker.
-- **It does not resurrect the data hypothesis.** "Balance the directions and add `en_to_ko`
-  idioms" is the obvious repair, and §7.18 is the reason not to reach for it: adding 449
-  `ko_to_en` idiom records did not produce `ko_to_en` idiom skill. There is no mechanism by
-  which the same treatment in the other direction would behave differently.
+- **It leaves the `en_to_ko` half untested, not refuted.** That direction was never trained on
+  idioms because no usable source was found (MEASUREMENT-NOTES §13 — `IdiomX` has 190K English
+  idiom contexts under MIT, rejected because they are synthetic and adversarial by
+  construction). That was a sourcing failure, and it happened *before* run 2, not as a
+  conclusion drawn from it.
 
 It does produce one concrete thing to watch. **If run 3 improves `ko_to_en` and not `en_to_ko`,
 the imbalance becomes the first suspect rather than a footnote** — that would be depth
 unlocking the data that exists, and the missing half of the data would then be the binding
 constraint. `score/direction_split.py` answers it for free. Writing the prediction down before
 the run finishes is what keeps it from being a story assembled around whatever comes back.
+
+### 7.21 A correction: one direction's failure is not the other's (2026-09-02)
+
+§7.20 as first written argued that adding `en_to_ko` idiom data was not worth pursuing, because
+449 `ko_to_en` idiom records had failed to produce `ko_to_en` idiom skill and "there is no
+mechanism by which the same treatment in the other direction would behave differently." Both
+halves of that are wrong, and the entry has been corrected.
+
+**The chronology was inverted.** `en_to_ko` was not skipped on evidence from run 2. It was
+skipped before run 2 existed, because no usable source was found — `IdiomX` carries 190K
+English idiom contexts under MIT and was rejected for being synthetic and adversarial by
+construction (MEASUREMENT-NOTES §13). Presenting a sourcing failure as a conclusion drawn from
+a result makes an unfounded decision read as a founded one. That is the more serious of the two
+errors, because it is the kind that survives into a summary.
+
+**The extrapolation contradicts the measurements already on file.** The two directions are not
+the same task for this model, and the control says so plainly:
+
+| control, n=20 each | `ko_to_en` | `en_to_ko` |
+|---|---|---|
+| `nuanceGrounded` | 1/20 (5%) | 10/20 (**50%**) |
+| `tipFactual` | 9/20 (45%) | 16/20 (80%) |
+| `naturalFluent` | 16/20 (80%) | 14/20 (70%) |
+
+On the primary target the untuned model is **ten times better** in `en_to_ko`. Recognising that
+`귀가 얇다` means gullible and rendering it in English is not the same problem as recognising
+`spill the beans` and rendering it in Korean — the second sits on the model's stronger language
+for comprehension. A treatment that failed where the base model is at the floor is weak
+evidence about a direction where it already clears half the items.
+
+The honest position is narrower than either the original claim or its opposite:
+
+- **§7.18 stands.** Run 2's `nuanceGrounded` gain did not come from the idiom data. That is an
+  attribution of an observed effect, and it does not depend on any of this.
+- **`en_to_ko` idiom training is untested and currently unsourceable.** Not refuted. If a
+  source of natural English idiom sentences appears, run 2 gives no reason to skip it.
+- **What run 2 does support is one sentence:** adding 449 `ko_to_en` idiom records did not
+  create `ko_to_en` idiom skill. Everything beyond that direction is extrapolation.
+
+The general failure is worth naming. **An experiment that fails on one arm of an asymmetric
+pair licenses a claim about that arm only**, and the asymmetry here was not hidden — it was
+sitting in the control's own numbers, in the same table used to make the argument. The pull
+toward the wider claim is that it closes a question and shortens the list of things left to
+try. A shorter list is not the same as a settled one.
