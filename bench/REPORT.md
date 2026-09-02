@@ -66,3 +66,16 @@ Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120
 > Judge scores carry the judge's own biases and are for relative comparison
 > between the models in this table only.
 
+## Head-to-head against a baseline (pairwise sign test)
+
+| Candidate | Baseline | n | criterion | cand. wins | base. wins | ties | exact p |
+|---|---|---|---|---|---|---|---|
+| qwen3-14b-tuned-run1-mlx | `20260828T043641-qwen3-14b-control-mlx` | 40 | natural | 5 | 12 | 23 | 0.1435 |
+| qwen3-14b-tuned-run1-mlx | `20260828T043641-qwen3-14b-control-mlx` | 40 | nuance | 5 | 14 | 21 | 0.0636 |
+| qwen3-14b-tuned-run2-mlx | `20260828T043641-qwen3-14b-control-mlx` | 40 | natural | 7 | 9 | 24 | 0.8036 |
+| qwen3-14b-tuned-run2-mlx | `20260828T043641-qwen3-14b-control-mlx` | 40 | nuance | 7 | 14 | 19 | 0.1892 |
+
+> Both A/B orders are judged for every item, and ties are excluded from the test
+> rather than counted as evidence either way. A high tie count means the two models
+> mostly agree - read it before reading the p-value.
+
