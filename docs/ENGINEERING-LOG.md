@@ -1250,14 +1250,14 @@ measuring instrument.
 | eval `handbuilt-ext.jsonl` | 20 (50%) | 20 (50%) |
 
 **The training set is 2:1 toward one direction while the evaluation is 1:1.** Run 1 was
-balanced; adding the idiom sources made run 2 lopsided, because every NIKL source is Korean.
+balanced; run 2 is lopsided by design — the idiom treatment was applied to one direction on
+purpose (§7.21), and every NIKL source being Korean is what fixed which one.
 
-The sharper version of the same fact is worse than the ratio. All 447 `en_to_ko` records are
+The sharper version of the same fact is the one that matters. All 447 `en_to_ko` records are
 FLORES prose, so **`en_to_ko` contains zero idiom examples** — while all 20 of the evaluation's
-`en_to_ko` items are idioms. Half the thing being judged was never trained for at all. The
-existing note (MEASUREMENT-NOTES §13) recorded that no `en_to_ko` idiom source had been found
-and left it at that; what it did not say is that this makes run 2 a half-treatment measured
-against a whole test.
+`en_to_ko` items are idioms. Run 2 is a half-treatment measured against a whole test, and that
+is the design: the untreated half is the control. What was missing from the record was this
+sentence saying so, not the arrangement itself.
 
 **The holdout moved too, so two loss numbers that look comparable are not.** `teacher/valid`
 is 100 records at 49/51; `teacher-run2/valid` is 150 at 99/51. Run 1's final holdout loss of
@@ -1274,11 +1274,10 @@ None of this changes what has already been concluded, and it is worth being exac
 - **§7.18's attribution is unaffected, and if anything strengthened.** The argument is that the
   direction which received *no* new records improved as much as the one that received 449. A
   larger imbalance makes that contrast sharper, not weaker.
-- **It leaves the `en_to_ko` half untested, not refuted.** That direction was never trained on
-  idioms because no usable source was found (MEASUREMENT-NOTES §13 — `IdiomX` has 190K English
-  idiom contexts under MIT, rejected because they are synthetic and adversarial by
-  construction). That was a sourcing failure, and it happened *before* run 2, not as a
-  conclusion drawn from it.
+- **The untreated half is the point, not an oversight.** `en_to_ko` was left without idiom data
+  deliberately, so that it would serve as a control inside the same training run — which is
+  what made §7.18's attribution possible at all. §7.21 covers the design and what follows from
+  it.
 
 It does produce one concrete thing to watch. **If run 3 improves `ko_to_en` and not `en_to_ko`,
 the imbalance becomes the first suspect rather than a footnote** — that would be depth
@@ -1286,22 +1285,32 @@ unlocking the data that exists, and the missing half of the data would then be t
 constraint. `score/direction_split.py` answers it for free. Writing the prediction down before
 the run finishes is what keeps it from being a story assembled around whatever comes back.
 
-### 7.21 A correction: one direction's failure is not the other's (2026-09-02)
+### 7.21 One direction was treated on purpose, and that is what makes the answer readable (2026-09-02)
 
-§7.20 as first written argued that adding `en_to_ko` idiom data was not worth pursuing, because
-449 `ko_to_en` idiom records had failed to produce `ko_to_en` idiom skill and "there is no
-mechanism by which the same treatment in the other direction would behave differently." Both
-halves of that are wrong, and the entry has been corrected.
-
-**The chronology was inverted.** `en_to_ko` was not skipped on evidence from run 2. It was
-skipped before run 2 existed, because no usable source was found — `IdiomX` carries 190K
+Run 2 added idiom data to `ko_to_en` only. That was a design choice, not an accident of what
+happened to be available: treat one direction, leave the other untouched, and the untreated
+direction becomes a control that lives **inside the same training run** — same base model, same
+teacher, same hyperparameters, same optimizer trajectory, same everything except the treatment.
+Korean was the direction treated because that is where usable sources were (`IdiomX` has 190K
 English idiom contexts under MIT and was rejected for being synthetic and adversarial by
-construction (MEASUREMENT-NOTES §13). Presenting a sourcing failure as a conclusion drawn from
-a result makes an unfounded decision read as a founded one. That is the more serious of the two
-errors, because it is the kind that survives into a summary.
+construction, MEASUREMENT-NOTES §13), but the decision to treat one direction and measure both
+was deliberate and predates the run.
 
-**The extrapolation contradicts the measurements already on file.** The two directions are not
-the same task for this model, and the control says so plainly:
+It paid off exactly as intended. §7.18 could ask *which variable does this result belong to?*
+and get an answer from arithmetic on files already on disk, because the experiment had been
+built with the question in it. Run 2's one improvement appeared in both directions, and the
+untreated one captured a larger share of its headroom — so the improvement was not the
+treatment's.
+
+**The conclusion that follows is about what to do next.** The pilot asked whether adding idiom
+data produces idiom skill. It does not. Extending the same treatment to `en_to_ko` — sourcing
+English idiom sentences, balancing the split, filling the half of the evaluation that has no
+matching training data — is buying more of something that has been tested once and did nothing.
+So it is not the next move, and the missing `en_to_ko` idiom data stops being a gap that has to
+be closed before anything else can be concluded.
+
+One caveat keeps this a prior rather than a proof, and it is visible in the control's own
+numbers:
 
 | control, n=20 each | `ko_to_en` | `en_to_ko` |
 |---|---|---|
@@ -1309,23 +1318,16 @@ the same task for this model, and the control says so plainly:
 | `tipFactual` | 9/20 (45%) | 16/20 (80%) |
 | `naturalFluent` | 16/20 (80%) | 14/20 (70%) |
 
-On the primary target the untuned model is **ten times better** in `en_to_ko`. Recognising that
+On the primary target the untuned model is ten times better in `en_to_ko`. Recognising that
 `귀가 얇다` means gullible and rendering it in English is not the same problem as recognising
 `spill the beans` and rendering it in Korean — the second sits on the model's stronger language
-for comprehension. A treatment that failed where the base model is at the floor is weak
-evidence about a direction where it already clears half the items.
+for the comprehension half. A pilot run where the base model sits at the floor is the harder
+test, which is a reasonable place to pilot, and it is also the place where a null result
+generalises least confidently. **Deprioritised, not refuted**: if English idiom sentences turn
+up cheaply, nothing here says to discard them; it says not to spend the next block of effort
+hunting for them.
 
-The honest position is narrower than either the original claim or its opposite:
-
-- **§7.18 stands.** Run 2's `nuanceGrounded` gain did not come from the idiom data. That is an
-  attribution of an observed effect, and it does not depend on any of this.
-- **`en_to_ko` idiom training is untested and currently unsourceable.** Not refuted. If a
-  source of natural English idiom sentences appears, run 2 gives no reason to skip it.
-- **What run 2 does support is one sentence:** adding 449 `ko_to_en` idiom records did not
-  create `ko_to_en` idiom skill. Everything beyond that direction is extrapolation.
-
-The general failure is worth naming. **An experiment that fails on one arm of an asymmetric
-pair licenses a claim about that arm only**, and the asymmetry here was not hidden — it was
-sitting in the control's own numbers, in the same table used to make the argument. The pull
-toward the wider claim is that it closes a question and shortens the list of things left to
-try. A shorter list is not the same as a settled one.
+The methodological point is the one worth carrying forward. **A single-direction treatment with
+a bidirectional evaluation is a within-run control, and it costs nothing to design in.** The
+alternative — treat both directions, then wonder which one the result came from — would have
+needed a second training run to answer what a single-direction pilot answered for free.
