@@ -257,6 +257,17 @@ broker routing rather than model behaviour.
   clear it. **The criterion was fixed as the pairwise test before any of this ran**, which is
   the only thing that keeps picking it from being a post-hoc choice
   ([§7.16](ENGINEERING-LOG.md#716-the-second-run-also-failed-the-sign-test-2026-09-02)).
+- **The direction split says the one improvement did not come from the idiom data.** Every
+  NIKL source is Korean, so run 2 raised `ko_to_en` training records 449 → 898 and left
+  `en_to_ko` at 447 — zero new records. Against the control, `nuanceGrounded` gained 4 items
+  in the trained direction and 3 in the untrained one, and correcting for headroom the
+  untrained direction captured more of it (3 of 10 available, versus 4 of 19). A direction
+  that received no data cannot have learned anything direction-specific from it, so what moved
+  is a general change in output style — the teacher's way of writing nuance notes — not idiom
+  skill. The worst regression sits in the direction that did get the data: `altsDistinct`
+  12/20 → 8/20. Each cell is n=20, so no single movement here is significant, and no
+  per-direction p-value is computed
+  ([§7.18](ENGINEERING-LOG.md#718-the-direction-split-says-the-gain-did-not-come-from-the-idiom-data-2026-09-02)).
 - **Two judge verdicts were nearly lost to the product's token ceiling.** `judge.js` inherited
   the extension's 2048-token `maxTokens` default; `claude-sonnet-5` bills reasoning against it
   and, on the two items where the outputs were hardest to separate, returned HTTP 200 with
