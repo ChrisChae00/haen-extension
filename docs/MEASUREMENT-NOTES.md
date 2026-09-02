@@ -532,3 +532,32 @@ transfers across that register gap is exactly what run 2 measures, and if run 2 
 idiom set without improving these, the register gap is the first thing to suspect. The
 alternative — writing short conversational sentences to order — trades a measurable mismatch
 for unmeasurable synthetic-data bias, which is worse.
+
+## 14. Reading a null result before the instrument that decides has run (2026-09-02)
+
+Run 2's automatic metrics are indistinguishable from the control's — COMET 0.7069 against
+0.7064, on a confidence interval 0.09 wide (ENGINEERING-LOG §7.13). The temptation is to call
+that a null result and stop. It is not one, and the reason is a distinction worth keeping.
+
+**Not measurable and not present are different claims.** COMET on n=40 resolves differences
+of roughly a tenth of a point; the observed difference is five ten-thousandths. That rules out
+a large effect. It says nothing about an effect the size the judge is asked to detect, and
+§7.9 already recorded these two instruments disagreeing: run 1's COMET fell 0.016 while the
+judge's `nuanceGrounded` rose 2.5 points. Neither was noise; they measure different things.
+Quoting the automatic metrics as the verdict would be citing the instrument that was not the
+success criterion, because it was the one that had already been run.
+
+**But some conclusions do not need the judge.** `altsExactlyTwo` is 97.5% against a floor of
+100% — a hard compliance gate, measured deterministically, failing on one item in forty. That
+is a fact about the candidate, and no judge ruling changes it. The two conclusions have to be
+kept separate:
+
+- *Can this ship?* No. It fails a hard gate. Decided, cheaply, before spending anything.
+- *Did the training teach anything?* Unknown. The criterion for that is the pairwise sign test
+  and it has not been run.
+
+The failure mode this avoids is the one where a cheap measurement that came back first gets
+promoted to the answer because it is available. **The order measurements complete is not the
+order they have authority in.** Write down which instrument the criterion named before any
+numbers exist, then read that one — and let the cheap gates disqualify independently, since a
+candidate can be both unshippable and informative.
