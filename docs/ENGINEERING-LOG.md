@@ -1135,3 +1135,56 @@ The general failure is worth naming because it is quiet: **the measurements that
 report are the ones some pipeline already carries, not the ones that matter most.** Nothing was
 wrong with any number here. The criterion had simply never been wired into the artefact anyone
 would read, and the run that failed it was the second one, not the first.
+
+### 7.18 The direction split says the gain did not come from the idiom data (2026-09-02)
+
+Run 2's one encouraging number was `nuanceGrounded`, 27.5% → 45.0% against the control. The
+cheapest way to ask whether the idiom data earned it is to split by direction, because the
+data can only have touched one of them.
+
+Every NIKL source sentence is Korean, so every record it produced is a `ko_to_en` example. The
+training sets confirm it — counted from each record's `detected_lang`:
+
+| | KO source (`ko_to_en`) | EN source (`en_to_ko`) |
+|---|---|---|
+| run 1 `teacher/train` | 449 | 447 |
+| run 2 `teacher-run2/train` | **898** | **447** |
+
+`en_to_ko` received **zero** new training records between the two runs. If the idiom sources
+taught idiom handling, the improvement should be lopsided toward `ko_to_en`. Against the
+control:
+
+| criterion | `ko_to_en` control → run 2 | `en_to_ko` control → run 2 |
+|---|---|---|
+| `naturalFluent` | 16/20 → 14/20 (−2) | 14/20 → 13/20 (−1) |
+| `nuanceGrounded` | 1/20 → 5/20 (**+4**) | 10/20 → 13/20 (**+3**) |
+| `altsDistinct` | 12/20 → 8/20 (**−4**) | 8/20 → 9/20 (+1) |
+| `tipFactual` | 9/20 → 11/20 (+2) | 16/20 → 12/20 (−4) |
+
+**It is not lopsided.** The trained direction gained four items on `nuanceGrounded` and the
+untrained one gained three — and correcting for headroom makes the untrained direction look
+*better*, not worse: `ko_to_en` started at 1/20 and captured 4 of its 19 available items (21%),
+while `en_to_ko` started at 10/20 and captured 3 of 10 (30%).
+
+A direction that received no new data cannot have learned anything direction-specific from it.
+Whatever moved `nuanceGrounded` moved both directions roughly equally, which is what a general
+change in output style looks like — the model writing longer, more particular-sounding nuance
+notes because that is what the teacher's records look like. That is the same thing §7.10 said
+the loss curve was measuring: format, not phenomenon. The idiom sentences added 449 more
+examples of the teacher's writing, and the writing is what transferred.
+
+**The direction that did get the data is also where the worst regression is.** `altsDistinct`
+fell 12/20 → 8/20 in `ko_to_en` and rose 8/20 → 9/20 in `en_to_ko`. Four items is not a result
+on n=20, but it is the opposite of the sign the data was bought for, and it is in the only
+direction the data could reach.
+
+**Confidence limits.** Every cell is n=20, so ±3 items is within what this table can resolve
+and none of these movements is individually significant; no p-value is computed per direction
+for exactly that reason (`score/direction_split.py` reports counts only). The comparison used
+throughout is control → run 2, not run 1 → run 2, because run 1 differs in epochs and in having
+run uninterrupted, and attributing a difference to data while two other things changed is the
+error this whole split exists to avoid.
+
+What the split does support is narrow and useful: **the improvement is not evidence that the
+idiom sources worked.** Buying more of them, or better ones, is not the obvious next move it
+looked like an hour ago.
