@@ -232,7 +232,9 @@ broker routing rather than model behaviour.
   Run 2 replaced the FLORES prose with 500 NIKL idiom sources interleaved into the training set
   (1,345 records, one epoch, 168 optimizer updates) and finished on 2026-09-02 across three
   legs — one machine-sleep death and two deliberate stops, so **it is not one uninterrupted
-  pass** and each resume reset Adam's moments. Holdout loss reached 0.885. Served unfused and
+  pass** and each resume reset Adam's moments. Holdout loss reached 0.885, which is **not
+  comparable to run 1's 0.859** — the holdout itself grew from 100 records to 150 and changed
+  composition with them. Served unfused and
   behaviourally verified, its outputs differ from the control's on 30 of 40 `natural` fields
   and 40 of 40 `nuance`, so the adapter is active — but COMET is 0.7069 against the control's
   0.7064 on a CI 0.09 wide, chrF2 25.18 against 24.58, p50 latency 9,763 ms against 9,767 ms.
@@ -268,6 +270,16 @@ broker routing rather than model behaviour.
   12/20 → 8/20. Each cell is n=20, so no single movement here is significant, and no
   per-direction p-value is computed
   ([§7.18](ENGINEERING-LOG.md#718-the-direction-split-says-the-gain-did-not-come-from-the-idiom-data-2026-09-02)).
+- **The run 2 training set is unbalanced by direction, and half the evaluation was never
+  trained for.** Every NIKL source is Korean, so run 2's training split is 898 `ko_to_en` to
+  447 `en_to_ko` (67/33) against a 20/20 evaluation, where run 1 was 449/447. Worse than the
+  ratio: all 447 `en_to_ko` records are FLORES prose, so that direction contains **zero** idiom
+  examples while all 20 of its evaluation items are idioms. This does not change the verdict or
+  the attribution — run 3 holds the same data constant, and the direction split's argument
+  rests on the direction that got *nothing* improving anyway — but it makes run 2 a
+  half-treatment measured against a whole test, and it is the first thing to suspect if run 3
+  improves `ko_to_en` alone
+  ([§7.20](ENGINEERING-LOG.md#720-the-training-set-is-unbalanced-by-direction-and-the-holdout-moved-with-it-2026-09-02)).
 - **The third run tests depth, and a probe sized it before it started.** Runs 1 and 2 trained
   the last 8 of Qwen3-14B's 40 transformer blocks — the final fifth of the stack, 0.043% of
   parameters. An adapter confined there can reshape phrasing without reaching where lexical and
