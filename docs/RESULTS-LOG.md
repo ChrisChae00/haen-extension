@@ -228,6 +228,21 @@ broker routing rather than model behaviour.
   zero idioms while success is judged on 40 idiom items. The model learned the teacher's output
   format — the front-loaded loss curve — and nothing about idioms. Not "fine-tuning does not
   work here", but "fine-tuning on data without the target phenomenon does not work here".
+- **The second run trained on idioms, and no automatic metric can tell it from the control.**
+  Run 2 replaced the FLORES prose with 500 NIKL idiom sources interleaved into the training set
+  (1,345 records, one epoch, 168 optimizer updates) and finished on 2026-09-02 across three
+  legs — one machine-sleep death and two deliberate stops, so **it is not one uninterrupted
+  pass** and each resume reset Adam's moments. Holdout loss reached 0.885. Served unfused and
+  behaviourally verified, its outputs differ from the control's on 30 of 40 `natural` fields
+  and 40 of 40 `nuance`, so the adapter is active — but COMET is 0.7069 against the control's
+  0.7064 on a CI 0.09 wide, chrF2 25.18 against 24.58, p50 latency 9,763 ms against 9,767 ms.
+  **It fails the same hard compliance gate run 1 did**: `altsExactlyTwo` 97.5% against a floor
+  of 100%. The two flagship failures are unfixed — `걔는 귀가 얇아` still comes back as "She has
+  thin ears", and `눈치 좀 챙겨` changes from "Keep an eye on things" to "Watch your back"
+  ([§7.13](ENGINEERING-LOG.md#713-the-second-run-finished-and-the-automatic-metrics-cannot-tell-it-from-the-control-2026-09-02)).
+  **The verdict is still open**: the primary criterion is the pairwise sign test against the
+  control and it has not been run. The automatic metrics were never the criterion, and run 1 is
+  on record with these two instruments disagreeing.
 - **The untuned control exists and is measured** (2026-08-27), which closed the last of the
   seven pre-evaluation blockers. It immediately earned its cost: with weights mathematically
   identical to the product baseline, 31 of 40 `natural` outputs differ, and the absolute

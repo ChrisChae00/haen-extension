@@ -937,3 +937,75 @@ is lost is roughly ten steps of momentum out of 168 updates. The resume config u
 (the batch permutation is seeded, so the same seed would replay the records already seen) and
 a new adapter directory (numbered checkpoints restart at 224 on resume and would overwrite the
 first attempt's, destroying the only record of what it reached).
+
+### 7.13 The second run finished, and the automatic metrics cannot tell it from the control (2026-09-02)
+
+Run 2 completed its epoch across three legs — 672 + 224 + 449 of 1,345 iterations, two
+deliberate resumes and one machine-sleep death between them. Holdout loss fell 0.908 → 0.885
+over the final leg. The adapter is `tuning/adapters-run2c`.
+
+Both arms were then served unfused through `mlx_server_adapter.py`. The behavioural gate
+passed — *adapter verified: output differs from the base model* — and the candidate's outputs
+differ from the control's on 30 of 40 `natural` fields, 40 of 40 `nuance`, and 36 of 40
+`literal`. The adapter is unambiguously doing something.
+
+What it is doing does not show up in any automatic metric:
+
+| | control | run 1 | run 2 |
+|---|---|---|---|
+| COMET overall | 0.7064 | 0.6902 | **0.7069** |
+| COMET 95% CI | 0.6621–0.7494 | 0.6445–0.7361 | 0.6549–0.7568 |
+| chrF2 | 24.583 | 24.634 | **25.177** |
+| latency p50 (ms) | 9,767 | 9,572 | 9,763 |
+| `altsExactlyTwo` | 1.000 | 0.975 | 0.975 |
+
+COMET moves by 0.0005 on n=40, against a confidence interval 0.09 wide. That is not a small
+effect, it is no effect the instrument can see. Run 2 also **fails the compliance gate** for
+the same reason run 1 did: `altsExactlyTwo` 97.5% against a floor of 100%, one item in forty.
+
+The two flagship failures from §7.10 are worth reading directly, because they are what the
+idiom data was bought to fix:
+
+| source | control | run 1 | run 2 |
+|---|---|---|---|
+| 걔는 귀가 얇아. | She's got thin ears. | She has thin ears. | She has thin ears. |
+| 눈치 좀 챙겨. | Keep an eye on things. | Keep an eye on things. | Watch your back. |
+
+`귀가 얇다` is "easily swayed" and `눈치` is "reading the room". All three runs translate the
+first literally, and run 2 changes the second into a different wrong answer. **500 Korean idiom
+sources did not fix the specific failure they were selected against**, at least not on these
+two items.
+
+None of this is the verdict. The primary criterion is the pairwise sign test against the
+control, and it has not been run — the automatic metrics were never the thing being asked, and
+§7.9 is on record that they disagreed with the judge before. What can be said now is narrower
+and still worth saying: **if the tuning moved the target, it moved it by less than the
+automatic instruments resolve, and the compliance gate fails regardless of how the judge
+rules.** A candidate that loses on a hard gate does not need the judge to be disqualified from
+shipping; the judge only decides whether the training taught anything.
+
+### 7.14 A reproduction that argued for the wrong population (2026-09-02)
+
+§7.11 could not recover run 1's swap behaviour after the fact, so it reproduced the
+configuration for 100 iterations, measured zero swapouts, and concluded "the configuration does
+not swap on a 24 GB machine". §7.12 already corrected the scope. Run 2's third leg finishes the
+job of refuting it, and refutes the repair I had reached for in the meantime.
+
+After leg 2 swapped heavily, the obvious suspects were the larger dataset and the fact that the
+machine had been up for two days — fragmentation. I leaned toward fragmentation. Leg 3 settles
+it: the machine had rebooted, swap in use was **0.00 MB** and free memory **79%** at the start,
+and the leg still wrote **224,312 swapout pages**, took swap to **2,756 MB**, and bottomed free
+memory at **11%**. A clean machine reaches the same state, so fragmentation is not the cause.
+
+The remaining candidate is dataset size, and I am not claiming it either — the measurement that
+separates training from evaluation was not taken. What is certain is that peak resident memory
+is **15.616 GB in both runs**, identical to run 1's. The number quoted in §7.11 as evidence of
+comfort is the same in the run that swaps and the run that does not.
+
+The general point is about what a reproduction is evidence for. Reproducing a configuration
+tells you about that configuration, and the conclusion was written about *the machine*. The
+sampled window was 100 iterations of run 1's data; run 2 differed in the one dimension the
+window held fixed. **A reproduction inherits the scope of what it varied, and generalising past
+that is not a weaker claim, it is a different one.** The instrument that caught this is the
+per-run sampler §7.11 introduced — the argument was wrong, and the record it was replaced with
+is what showed it.

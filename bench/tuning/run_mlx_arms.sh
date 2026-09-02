@@ -20,7 +20,16 @@ PORT=8080
 MODEL=mlx-community/Qwen3-14B-4bit
 PY=../.venv-mlx/bin/python
 
-for config in configs/qwen3-14b-control-mlx.json configs/qwen3-14b-tuned-run1-mlx.json; do
+# Which arms to run. Pass configs as arguments to run a subset -- the control arm is a
+# property of the base model, not of any adapter, so once it has been measured a later
+# candidate only needs its own arm:
+#   bash tuning/run_mlx_arms.sh configs/qwen3-14b-tuned-run2-mlx.json
+configs=("$@")
+if [ ${#configs[@]} -eq 0 ]; then
+  configs=(configs/qwen3-14b-control-mlx.json configs/qwen3-14b-tuned-run1-mlx.json)
+fi
+
+for config in "${configs[@]}"; do
   adapter=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('adapterPath') or '')" "$config")
   name=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['name'])" "$config")
   echo "=== $name (adapter: ${adapter:-none}) ==="
