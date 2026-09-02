@@ -1,0 +1,53 @@
+# Phase 5, third QLoRA run. Identical to run 2 except the LoRA's depth: the one change is
+# `num_layers` 8 -> 40, so if run 3 moves, depth is why.
+#
+# `grad_checkpoint` is the exception and it is not a second variable: it recomputes activations
+# in the backward pass instead of storing them, which leaves the gradients bit-identical and
+# only trades wall clock for memory. Measured on a 40-iteration probe: peak memory 11.901 GB
+# against run 2's 15.616 GB, zero swapouts against run 2's 224,312, and 0.052 it/s against
+# 0.108. One epoch is therefore ~7.2 hours of compute plus three evaluations.
+#
+# Runs 1 and 2 trained `num_layers: 8` - the last 8 of the model's 40 blocks, the final 20% of
+# the stack, 0.043% of parameters. That adapter can reshape how the model says things and has
+# no access to where lexical and idiomatic meaning is resolved, which is exactly the split the
+# direction analysis found (ENGINEERING-LOG 7.18): style transferred, phenomenon did not.
+model: "mlx-community/Qwen3-14B-4bit"
+train: true
+data: "../datasets/train/teacher-run2"
+
+fine_tune_type: lora
+num_layers: 40
+lora_parameters:
+  rank: 8
+  scale: 20.0
+  dropout: 0.0
+
+mask_prompt: true
+
+# All 40 blocks OOMed on 24 GB without this: [METAL] Insufficient Memory at the first
+# mx.eval, free memory at 6%. Recomputing activations in the backward pass instead of
+# holding them trades wall clock for memory and is mathematically neutral - the gradients
+# are identical, so this does not change what the run learns.
+grad_checkpoint: true
+
+optimizer: adam
+learning_rate: 2e-5
+batch_size: 1
+grad_accumulation_steps: 8
+
+iters: 1345
+max_seq_length: 1536
+
+steps_per_report: 40
+# The holdout costs ~17 minutes and this run is twice as slow per iteration, so evaluate half
+# as often as run 2 did (448 rather than 224) to keep evaluation under 4% of wall clock. Three
+# points across the run is enough to see whether the curve behaves like run 2's.
+steps_per_eval: 448
+val_batches: -1
+save_every: 224
+adapter_path: "adapters-run3"
+seed: 20260903
+
+# Checkpoints every 224 iters: at ~0.052 it/s that is a resume point every ~72 minutes, and
+# run 2 lost 56 iterations to a stop between checkpoints. Eight hours is long enough that the
+# machine sleeping once is the expected case, not the unlucky one.

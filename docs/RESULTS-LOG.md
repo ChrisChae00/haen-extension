@@ -268,6 +268,18 @@ broker routing rather than model behaviour.
   12/20 → 8/20. Each cell is n=20, so no single movement here is significant, and no
   per-direction p-value is computed
   ([§7.18](ENGINEERING-LOG.md#718-the-direction-split-says-the-gain-did-not-come-from-the-idiom-data-2026-09-02)).
+- **The third run tests depth, and a probe sized it before it started.** Runs 1 and 2 trained
+  the last 8 of Qwen3-14B's 40 transformer blocks — the final fifth of the stack, 0.043% of
+  parameters. An adapter confined there can reshape phrasing without reaching where lexical and
+  idiomatic meaning is resolved, which is the split the direction analysis found. Run 3 changes
+  `num_layers` 8 → 40 and nothing else. A 40-iteration probe cost fifteen minutes and returned
+  `[METAL] Insufficient Memory`; with `grad_checkpoint: true` — which recomputes activations
+  rather than storing them, leaving gradients identical — the same configuration peaks at
+  **11.901 GB against run 2's 15.616 GB with zero swapouts against run 2's 224,312**, at half
+  the speed. Training five times as many blocks uses less memory than run 2 did, which settles
+  the open question from §7.14: the swap runs 1 and 2 paid for was stored activations, not
+  dataset size or fragmentation, and the flag that removes it was available throughout
+  ([§7.19](ENGINEERING-LOG.md#719-a-fifteen-minute-probe-that-replaced-an-eight-hour-guess-2026-09-02)).
 - **Two judge verdicts were nearly lost to the product's token ceiling.** `judge.js` inherited
   the extension's 2048-token `maxTokens` default; `claude-sonnet-5` bills reasoning against it
   and, on the two items where the outputs were hardest to separate, returned HTTP 200 with

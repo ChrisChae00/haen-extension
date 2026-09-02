@@ -591,3 +591,32 @@ The corollary is that the losing measurement still gets reported. A pre-register
 buys nothing if the numbers that disagree with the outcome are quietly dropped; the +17.5 is
 the strongest evidence the idiom data did anything at all, and it belongs in the record next to
 the test it failed.
+
+## 16. Asking which variable a result belongs to before adding another one (2026-09-02)
+
+Run 2's only encouraging number was `nuanceGrounded`, +17.5 points against the control. The
+natural next move was to buy more of what produced it — better idiom sources, shorter and more
+conversational ones, the register fix already written down as a known limitation (§13).
+
+The direction split cost nothing and asked a different question first: *which variable does
+this result belong to?* Every NIKL source is Korean, so the data could only ever have touched
+`ko_to_en`. The improvement appeared in both directions, and the direction that received no new
+records captured a larger share of its available headroom. Whatever moved was not the thing
+that changed.
+
+This is not a subtle statistical point and that is why it is worth writing down. **A run
+changes one variable, but the outcome is measured over everything the model does**, and the
+part of the outcome that moved may sit entirely outside the variable's reach. Checking that the
+effect is where the cause could have acted is separate from checking that the effect is real,
+and it is usually much cheaper — here it was arithmetic on files already on disk, against a
+third training run costing hours.
+
+The check needs a partition the manipulated variable respects. Direction worked because the
+data was 100% one-sided; it would have said nothing had the idiom sources been bilingual. Where
+no such partition exists, this test is unavailable, and the honest position is that
+attribution rests on the experiment's design alone.
+
+It also has to be run *before* the follow-up is designed, not after. Had run 3 been built as
+"more and better idiom data" and then failed, the reading would have been "the register gap was
+worse than expected" — a conclusion about data quality, from an experiment whose premise the
+split had already refuted for free.

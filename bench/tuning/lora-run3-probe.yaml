@@ -1,0 +1,43 @@
+# Cost probe for run 3, NOT a training run. 40 iterations to measure it/sec and peak memory
+# with the LoRA spread over all 40 transformer blocks instead of the top 8, before committing
+# to a multi-hour run. Its adapter output is throwaway.
+#
+# Runs 1 and 2 trained `num_layers: 8` - the last 8 of the model's 40 blocks, the final 20% of
+# the stack, 0.043% of parameters. That adapter can reshape how the model says things and has
+# no access to where lexical and idiomatic meaning is resolved, which is exactly the split the
+# direction analysis found (ENGINEERING-LOG 7.18): style transferred, phenomenon did not.
+model: "mlx-community/Qwen3-14B-4bit"
+train: true
+data: "../datasets/train/teacher-run2"
+
+fine_tune_type: lora
+num_layers: 40
+lora_parameters:
+  rank: 8
+  scale: 20.0
+  dropout: 0.0
+
+mask_prompt: true
+
+# All 40 blocks OOMed on 24 GB without this: [METAL] Insufficient Memory at the first
+# mx.eval, free memory at 6%. Recomputing activations in the backward pass instead of
+# holding them trades wall clock for memory and is mathematically neutral - the gradients
+# are identical, so this does not change what the run learns.
+grad_checkpoint: true
+
+optimizer: adam
+learning_rate: 2e-5
+batch_size: 1
+grad_accumulation_steps: 8
+
+iters: 40
+max_seq_length: 1536
+
+steps_per_report: 10
+# No evaluation in a probe: the holdout costs ~17 minutes and measures learning, which 40
+# iterations cannot show. This run only answers "how fast and how much memory".
+steps_per_eval: 1000
+val_batches: 1
+save_every: 1000
+adapter_path: "adapters-run3-probe"
+seed: 20260903
