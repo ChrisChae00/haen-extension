@@ -561,3 +561,33 @@ promoted to the answer because it is available. **The order measurements complet
 order they have authority in.** Write down which instrument the criterion named before any
 numbers exist, then read that one — and let the cheap gates disqualify independently, since a
 candidate can be both unshippable and informative.
+
+## 15. Two rubrics, one criterion, and the order they were fixed in (2026-09-02)
+
+Run 2's absolute judge moved `nuanceGrounded` from the control's 27.5% to 45.0% — seven items,
+the largest movement this track has produced on its primary target. Its pairwise judge, shown
+the same two outputs together on the same 40 items, chose the control on `nuance` 14 times to
+the candidate's 7. Both numbers come from the same judge model, the same day, the same outputs.
+
+They are not in conflict, because they count different things:
+
+- **Absolute** asks of one output alone: *is this nuance note grounded?* It counts items that
+  clear a bar.
+- **Pairwise** asks of two outputs together: *which is more specific and accurate?* — with
+  *generic filler loses to a grounded explanation* as the tiebreak. It counts comparisons.
+
+A candidate can clear the bar on more items while being the weaker of the two on the items
+where both clear it. The binary criterion cannot separate two passes; the comparative one is
+built to.
+
+The methodological point is not which rubric is better. It is that **the criterion was fixed as
+the pairwise test before the training data was even selected**, and the absolute judge's +17.5
+is exactly the number one would reach for after seeing a failing p-value. Had the order been
+reversed — run both, then decide which one answers the question — the decision would have been
+made by the result. Writing the criterion down first is what makes "the absolute judge improved
+and the verdict is still failure" a reportable finding instead of an argument.
+
+The corollary is that the losing measurement still gets reported. A pre-registered criterion
+buys nothing if the numbers that disagree with the outcome are quietly dropped; the +17.5 is
+the strongest evidence the idiom data did anything at all, and it belongs in the record next to
+the test it failed.

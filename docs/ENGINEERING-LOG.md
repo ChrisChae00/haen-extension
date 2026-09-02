@@ -1009,3 +1009,99 @@ window held fixed. **A reproduction inherits the scope of what it varied, and ge
 that is not a weaker claim, it is a different one.** The instrument that caught this is the
 per-run sampler §7.11 introduced — the argument was wrong, and the record it was replaced with
 is what showed it.
+
+### 7.15 The judge inherited the product's token ceiling and lost the hardest items (2026-09-02)
+
+Run 2's pairwise judging came back *38/40 items complete, 2 failed*, and the completeness gate
+refused to compute a p-value on the subset (§9 of MEASUREMENT-NOTES). Re-running resumed from
+cache and failed on the same two items, `hbx-idb-019` and `hbx-idc-013`, with the same message:
+`Empty content in response`.
+
+Reproducing the exact request outside the harness printed the cause:
+
+```
+finish_reason: "length" | native_finish_reason: "max_tokens"
+content: null
+reasoning: "\"손이 미끄러졌어\" explicitly names the hand, so it's more likely about a hand
+            slipping and dropping something rather than the person themselves falling…"
+```
+
+`judge.js` calls the shared `apiClient`, whose `maxTokens` defaults to `DEFAULT_MAX_TOKENS`
+— 2048, the extension's shipping ceiling. `claude-sonnet-5` bills reasoning tokens against that
+budget, so on items where the two outputs are genuinely hard to separate it thinks past the
+ceiling and the answer is never emitted. The fix is one line at each judge call site:
+`maxTokens: JUDGE_MAX_TOKENS` (8192). The judge is not the product and has no reason to inherit
+the product's limit.
+
+Three things about the shape of this bug are worth keeping.
+
+**It was content-dependent, so retrying could not fix it.** At temperature 0 the same prompt
+produces the same reasoning and stops in the same place. A transient-failure retry loop would
+have burned money to fail identically — and the two arms are judged from cache, so a naive
+"skip the failures" would have silently made n=38.
+
+**It selects against exactly the items that matter.** The requests that overrun the budget are
+the ones where the judge deliberates longest, which is the same as saying the two outputs are
+closest. Dropping them is not random attrition; it removes the items with the most information
+about the difference being measured. A missing-data mechanism correlated with the effect is
+worse than a smaller sample.
+
+**Nothing in the response looked like an error.** HTTP 200, `finish_reason: "length"`, and a
+populated `reasoning` field with a null `content`. Only the completeness gate — which exists
+because of §9 and refuses to compute a statistic on a partial subset — turned it into a visible
+failure instead of two quietly missing rows. The gate paid for itself here; no test was added
+for the ceiling because the gate is the check, and it is the one that fires on the whole class
+of "the judge did not answer" rather than on this one cause.
+
+Rows already cached under the 2048 ceiling stay valid: at temperature 0 a larger budget only
+permits more tokens, so a response that already finished with `stop` is unchanged. Run 1's
+pairwise and absolute passes both completed with zero failures, so the ceiling never bound
+there and no earlier number is affected.
+
+### 7.16 The second run also failed the sign test (2026-09-02)
+
+With all 40 items complete in both A/B orders and zero failures:
+
+| criterion | candidate | control | ties | exact p |
+|---|---|---|---|---|
+| `natural` | 7 | 9 | 24 | 0.804 |
+| `nuance` | 7 | 14 | 19 | 0.189 |
+
+The criterion fixed before training was candidate wins > control wins on **both**, with
+p < 0.05. **The candidate loses both. Run 2 failed.** As with run 1, "significantly worse" is
+not established either — neither result clears p < 0.05 — so the honest statement is that
+there is no evidence the idiom training helped, and the point estimate favours the untuned
+model on both criteria.
+
+Against run 1 (`natural` 5/12/23, p = 0.143; `nuance` 5/14/21, p = 0.064) the candidate's wins
+rose from 5 to 7 on both criteria and the control's `natural` wins fell from 12 to 9. That is
+movement in the right direction and it is not a result: on n=40 with 19–24 ties, differences of
+two or three items are inside the noise the test exists to discount. Reporting it as progress
+would be reading the point estimate of a test that just declined to reject its null.
+
+**The absolute judge and the pairwise judge disagree, and the disagreement is the interesting
+part.** On the same 40 items:
+
+| criterion | control | run 1 | run 2 |
+|---|---|---|---|
+| `naturalFluent` | 75.0% | 70.0% | **67.5%** |
+| `nuanceGrounded` | 27.5% | 30.0% | **45.0%** |
+| `altsDistinct` | 50.0% | 55.0% | **42.5%** |
+| `tipFactual` | 62.5% | 50.0% | **57.5%** |
+
+`nuanceGrounded` rose 17.5 points, seven items — the largest movement this track has produced
+and the first time a tuned candidate beat the control on the primary target by a margin worth
+looking at. And the pairwise judge, given the same two outputs side by side, picked the control
+on `nuance` twice as often as the candidate.
+
+Both can be true. The absolute rubric asks "is this nuance note grounded?" of one output alone;
+the pairwise rubric asks "which of these two is more specific and accurate?" A candidate can
+clear the bar on more items in isolation while still being the weaker of the two on the items
+where both clear it — the absolute score counts items, the pairwise score counts comparisons,
+and a rubric that says *generic filler loses to a grounded explanation* discriminates between
+two passes that the binary criterion cannot separate.
+
+Which one is the criterion was fixed before any of this ran, and it is the pairwise test.
+That ordering is the only thing that keeps this from being a choice made after seeing the
+numbers — the absolute judge's +17.5 is precisely the number one would reach for. It is
+reported here, and it does not change the verdict.

@@ -27,7 +27,7 @@ compliance, latency, cost, and LLM judgement.
 | Dataset | 212 items (FLORES-200 devtest 200 + 12 hand-written) + 40 judge-only idiom items, both directions |
 | Total API calls (2026-08-22 measurement snapshot) | 3,200+ (212 × 2–3 runs per model) |
 | Measurement axes | COMET · chrF++ · BLEU · 15-check compliance · latency/TTFB percentiles · cost per token · LLM-as-judge on 4 criteria |
-| Paid judge verdicts | 476 (`claude-sonnet-5`, fixed) — 316 at the 2026-08-22 snapshot, +40 untuned control 2026-08-27, +82 absolute and +80 pairwise on the two unfused arms 2026-08-28 |
+| Paid judge verdicts | 596 (`claude-sonnet-5`, fixed) — 316 at the 2026-08-22 snapshot, +40 untuned control 2026-08-27, +82 absolute and +80 pairwise on the two unfused arms 2026-08-28, +40 absolute and +80 pairwise on the run 2 candidate 2026-09-02 |
 | Total paid measurement cost | ~$12.8 (OpenRouter ~$10.4 + Google AI Studio $2.5) as of 2026-08-31; $7.9 at the 2026-08-22 snapshot. Teacher batches: $1.649487 for 997 FLORES records, $0.815761 for 500 idiom records |
 | Fine-tuning run (2026-08-27) | QLoRA rank 8 / top 8 layers on Qwen3-14B-4bit, 896 distilled samples, 224 updates, 6h08m local, peak 15.6 GB of 24 GB; holdout loss 1.566 → 0.859 |
 | Harness tests (2026-08-31) | 76 passing (zero dependencies) |
@@ -240,9 +240,30 @@ broker routing rather than model behaviour.
   of 100%. The two flagship failures are unfixed — `걔는 귀가 얇아` still comes back as "She has
   thin ears", and `눈치 좀 챙겨` changes from "Keep an eye on things" to "Watch your back"
   ([§7.13](ENGINEERING-LOG.md#713-the-second-run-finished-and-the-automatic-metrics-cannot-tell-it-from-the-control-2026-09-02)).
-  **The verdict is still open**: the primary criterion is the pairwise sign test against the
-  control and it has not been run. The automatic metrics were never the criterion, and run 1 is
-  on record with these two instruments disagreeing.
+- **The second run failed the sign test too.** All 40 items completed in both A/B orders, zero
+  failures: `natural` candidate 7 / control 9 / 24 ties, p = 0.804; `nuance` candidate 7 /
+  control 14 / 19 ties, p = 0.189. The criterion was candidate > control on both with p < 0.05,
+  and the candidate loses both. Against run 1 the candidate's wins rose 5 → 7 on both criteria,
+  which on n=40 with 19–24 ties is inside the noise the test exists to discount, not progress.
+  Neither result clears p < 0.05 in either direction, so "significantly worse" is not
+  established either.
+- **The absolute judge moved sharply on the primary target and the pairwise judge did not
+  agree.** `nuanceGrounded` went 27.5% (control) → 30.0% (run 1) → **45.0%** (run 2), seven
+  items and the largest movement this track has produced — while the pairwise judge, shown the
+  same two outputs together, picked the control on `nuance` twice as often as the candidate.
+  The other three absolute criteria fell: `naturalFluent` 75.0% → 67.5%, `altsDistinct` 50.0%
+  → 42.5%, `tipFactual` 62.5% → 57.5%. Both readings can hold — the absolute rubric counts
+  items that clear a bar alone, the pairwise rubric counts comparisons between two that both
+  clear it. **The criterion was fixed as the pairwise test before any of this ran**, which is
+  the only thing that keeps picking it from being a post-hoc choice
+  ([§7.16](ENGINEERING-LOG.md#716-the-second-run-also-failed-the-sign-test-2026-09-02)).
+- **Two judge verdicts were nearly lost to the product's token ceiling.** `judge.js` inherited
+  the extension's 2048-token `maxTokens` default; `claude-sonnet-5` bills reasoning against it
+  and, on the two items where the outputs were hardest to separate, returned HTTP 200 with
+  `finish_reason: "length"` and a null content. Deterministic at temperature 0, so retrying
+  reproduced it exactly. The completeness gate refused to compute a p-value on 38 of 40 rather
+  than report a statistic on a subset selected against the closest items
+  ([§7.15](ENGINEERING-LOG.md#715-the-judge-inherited-the-products-token-ceiling-and-lost-the-hardest-items-2026-09-02)).
 - **The untuned control exists and is measured** (2026-08-27), which closed the last of the
   seven pre-evaluation blockers. It immediately earned its cost: with weights mathematically
   identical to the product baseline, 31 of 40 `natural` outputs differ, and the absolute

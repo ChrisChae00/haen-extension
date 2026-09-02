@@ -67,6 +67,16 @@ Respond with ONLY this JSON object, no prose and no code fences:
 // means the row is stale, not a cache hit.
 const RUBRIC_HASH = createHash('sha256').update(RUBRIC).digest('hex');
 
+// The judge is not the product, so it must not inherit the extension's 2048-token shipping
+// ceiling. claude-sonnet-5 bills its reasoning against max_tokens, and on the items where the
+// two outputs are hardest to separate it thinks past the ceiling and returns finish_reason
+// "length" with a null content - a verdict that never existed rather than a bad one. That is
+// content-dependent, so it reproduces exactly on retry and silently shrinks n on precisely the
+// items the comparison most needs. Raising the ceiling cannot change a verdict that already
+// finished: at temperature 0 a higher limit only lets more tokens be emitted, so rows cached
+// under the old value stay valid.
+const JUDGE_MAX_TOKENS = 8192;
+
 function parseArgs(argv) {
   const args = { runDir: null, baselineRunDir: null, limit: DEFAULT_SUBSET };
   for (let i = 0; i < argv.length; i++) {
@@ -380,6 +390,7 @@ async function mainAbsolute(args, runDir, config) {
           provider: config.judgeProvider ?? config.provider,
           modelId: config.judgeModelId,
           temperature: 0,
+          maxTokens: JUDGE_MAX_TOKENS,
           systemPromptOverride: RUBRIC,
           onRaw: body => { raw = body; },
         }).catch(() => {});
@@ -432,6 +443,7 @@ async function judgePairwiseOrder(api, item, candidate, baseline, candidatePosit
     provider: config.judgeProvider ?? config.provider,
     modelId: config.judgeModelId,
     temperature: 0,
+    maxTokens: JUDGE_MAX_TOKENS,
     useJsonMode: true,
     systemPromptOverride: PAIRWISE_RUBRIC,
     onRaw: body => { raw = body; },
