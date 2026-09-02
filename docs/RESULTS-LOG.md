@@ -278,10 +278,14 @@ broker routing rather than model behaviour.
   the attribution — run 3 holds the same data constant, and the direction split's argument
   rests on the direction that got *nothing* improving anyway — but it makes run 2 a
   half-treatment measured against a whole test, and it is the first thing to suspect if run 3
-  improves `ko_to_en` alone. `en_to_ko` idiom training is **untested, not refuted** — it was
-  skipped for want of a usable source before run 2 ran, and the control is ten times better in
-  that direction on the primary target (`nuanceGrounded` 10/20 versus 1/20), so run 2's failure
-  in `ko_to_en` says little about it
+  improves `ko_to_en` alone. Sourcing the missing half is **not the next
+  move** — run 2 tested whether idiom data produces idiom skill and it did not, so filling the
+  gap is buying more of a treatment that already did nothing. Leaving one direction untreated was the
+  design — it makes the untreated half a control inside the same training run, which is what
+  let the attribution be settled by arithmetic instead of a second run. Deprioritised is not
+  refuted: the control is ten times better in `en_to_ko` on the primary target
+  (`nuanceGrounded` 10/20 versus 1/20), so a null result piloted at the floor generalises least
+  confidently
   ([§7.20](ENGINEERING-LOG.md#720-the-training-set-is-unbalanced-by-direction-and-the-holdout-moved-with-it-2026-09-02)).
 - **The third run tests depth, and a probe sized it before it started.** Runs 1 and 2 trained
   the last 8 of Qwen3-14B's 40 transformer blocks — the final fifth of the stack, 0.043% of
