@@ -5,7 +5,7 @@
 
 Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120b, gpt-oss-20b, qwen3-14b-local, qwen3-14b-local-nothink, qwen3.6-27b.
 
-> **3 run(s) sit outside this matrix** (`gemini-3.7-flash-ext` on handbuilt-ext.jsonl; `qwen3-14b-nothink-ext` on handbuilt-ext.jsonl; `qwen3-14b-untuned-control-ext` on handbuilt-ext.jsonl). They were measured on a different dataset, so their COMET and compliance numbers answer a different question and are not model rows. They appear in the judge table below, where the `n` column says what each was scored on.
+> **7 run(s) sit outside this matrix** (`gemini-3.7-flash-ext` on handbuilt-ext.jsonl; `qwen3-14b-nothink-ext` on handbuilt-ext.jsonl; `qwen3-14b-untuned-control-ext` on handbuilt-ext.jsonl; `qwen3-14b-tuned-run1-ext` on handbuilt-ext.jsonl; `qwen3-14b-control-mlx` on handbuilt-ext.jsonl; `qwen3-14b-tuned-run1-mlx` on handbuilt-ext.jsonl; `qwen3-14b-tuned-run2-mlx` on handbuilt-ext.jsonl). They were measured on a different dataset, so their COMET and compliance numbers answer a different question and are not model rows. They appear in the judge table below, where the `n` column says what each was scored on.
 
 ## Model Benchmark Comparison Matrix
 
@@ -58,6 +58,9 @@ Benchmarked **7 model(s)**: gemini-3.5-flash-lite, gemini-3.7-flash, gpt-oss-120
 | gemini-3.7-flash-ext | 40 | 100.0% | 95.0% | 82.5% | 97.5% |
 | qwen3-14b-nothink-ext | 40 | 70.0% | 30.0% | 52.5% | 70.0% |
 | qwen3-14b-untuned-control-ext | 40 | 72.5% | 27.5% | 47.5% | 50.0% |
+| qwen3-14b-control-mlx | 40 | 75.0% | 27.5% | 50.0% | 62.5% |
+| qwen3-14b-tuned-run1-mlx | 40 | 70.0% | 30.0% | 55.0% | 50.0% |
+| qwen3-14b-tuned-run2-mlx | 40 | 67.5% | 45.0% | 42.5% | 57.5% |
 
 > Judge: `anthropic/claude-sonnet-5`, binary rubric. **Rows are not all scored on the same items** - read the `n` column, and compare only rows that share it.
 > Judge scores carry the judge's own biases and are for relative comparison
